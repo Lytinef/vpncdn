@@ -19,6 +19,7 @@ import { AdminLoginDto } from './dto/admin-login.dto';
 import { PaymentStatus } from '../payments/entities/payment.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { serializeSubscription } from '../subscriptions/subscriptions.serializer';
+import { DevicesService } from '../devices/devices.service';
 import {
   AdminGrantSubscriptionDto,
   AdminExtendDto,
@@ -32,6 +33,7 @@ export class AdminController {
     private readonly adminAuth: AdminAuthService,
     private readonly admin: AdminService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly devices: DevicesService,
   ) {}
 
   @Post('auth/login')
@@ -143,6 +145,15 @@ export class AdminController {
   async resumeSubscription(@Param('id') id: string) {
     const sub = await this.subscriptions.resume(id);
     return serializeSubscription(sub);
+  }
+
+  /** Отзыв (удаление) устройства пользователя — снимает доступ на узле. */
+  @Delete('users/:id/devices/:deviceId')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async removeDevice(@Param('id') id: string, @Param('deviceId') deviceId: string) {
+    await this.devices.remove(id, deviceId);
   }
 
   @Get('payments')

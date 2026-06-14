@@ -39,6 +39,9 @@ export class AdminNodesController {
       isActive: node.isActive,
       hasApi: !!node.apiUrl,
       devices,
+      cpuPercent: node.cpuPercent,
+      memPercent: node.memPercent,
+      metricsAt: node.metricsAt,
     }));
   }
 

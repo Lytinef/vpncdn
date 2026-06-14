@@ -61,6 +61,16 @@ export class Node {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
+  /** Последние метрики нагрузки узла (обновляются поллером). */
+  @Column({ type: 'int', nullable: true })
+  cpuPercent: number | null;
+
+  @Column({ type: 'int', nullable: true })
+  memPercent: number | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  metricsAt: Date | null;
+
   @OneToMany(() => Device, (d) => d.node)
   devices: Device[];
 

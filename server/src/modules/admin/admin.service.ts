@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, In, Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { Device } from '../devices/entities/device.entity';
+import { Node } from '../nodes/entities/node.entity';
 import {
   Subscription,
   SubscriptionStatus,
@@ -26,6 +27,7 @@ export class AdminService {
     @InjectRepository(Subscription) private readonly subs: Repository<Subscription>,
     @InjectRepository(Payment) private readonly payments: Repository<Payment>,
     @InjectRepository(Device) private readonly devices: Repository<Device>,
+    @InjectRepository(Node) private readonly nodesRepo: Repository<Node>,
     private readonly usersService: UsersService,
     private readonly account: AccountService,
   ) {}
@@ -49,11 +51,40 @@ export class AdminService {
       .andWhere('p.createdAt >= :from', { from: startOfMonth })
       .getRawOne<{ sum: string }>();
 
+    const serverLoad = await this.serverLoad();
+
     return {
       usersTotal,
       activeSubscriptions,
       activeDevices,
       revenueThisMonthRub: kopecksToRubles(Number(revenueRow?.sum ?? 0)),
+      serverLoad,
+    };
+  }
+
+  /** Сводная нагрузка по активным узлам (для дашборда). */
+  private async serverLoad() {
+    const nodes = await this.nodesRepo.find({ where: { isActive: true } });
+    const withMetrics = nodes.filter((n) => n.cpuPercent != null);
+    const avg = (arr: number[]) =>
+      arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+    const max = (arr: number[]) => (arr.length ? Math.max(...arr) : null);
+    const cpu = withMetrics.map((n) => n.cpuPercent as number);
+    const mem = withMetrics.map((n) => n.memPercent as number);
+    return {
+      nodesTotal: nodes.length,
+      nodesReporting: withMetrics.length,
+      avgCpuPercent: avg(cpu),
+      maxCpuPercent: max(cpu),
+      avgMemPercent: avg(mem),
+      maxMemPercent: max(mem),
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        name: n.name,
+        cpuPercent: n.cpuPercent,
+        memPercent: n.memPercent,
+        metricsAt: n.metricsAt,
+      })),
     };
   }
 
@@ -116,6 +147,8 @@ export class AdminService {
       order: { createdAt: 'DESC' },
       take: 50,
     });
+    const uplinkTotal = devices.reduce((a, d) => a + Number(d.uplinkBytes || 0), 0);
+    const downlinkTotal = devices.reduce((a, d) => a + Number(d.downlinkBytes || 0), 0);
     return {
       user: {
         id: user.id,
@@ -127,6 +160,11 @@ export class AdminService {
         isBlocked: user.isBlocked,
         createdAt: user.createdAt,
       },
+      traffic: {
+        uplinkBytes: uplinkTotal,
+        downlinkBytes: downlinkTotal,
+        totalBytes: uplinkTotal + downlinkTotal,
+      },
       subscriptions: subscriptions.map(serializeSubscription),
       devices: devices.map((d) => ({
         id: d.id,
@@ -134,6 +172,8 @@ export class AdminService {
         platform: d.platform,
         isActive: d.isActive,
         lastSeenAt: d.lastSeenAt,
+        uplinkBytes: Number(d.uplinkBytes || 0),
+        downlinkBytes: Number(d.downlinkBytes || 0),
       })),
       payments: payments.map((p) => ({
         id: p.id,

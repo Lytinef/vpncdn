@@ -200,7 +200,7 @@ class VpnConnectionService : VpnService() {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val notification: Notification = Notification.Builder(this, CHANNEL)
-            .setContentTitle("VPN-CDN")
+            .setContentTitle("Unway")
             .setContentText("VPN активен")
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentIntent(pi)

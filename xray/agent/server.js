@@ -12,6 +12,7 @@
 
 const express = require('express');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const grpc = require('@grpc/grpc-js');
@@ -40,6 +41,13 @@ const packageDefinition = protoLoader.loadSync(path.join(PROTO_DIR, 'command.pro
 });
 const grpcPkg = grpc.loadPackageDefinition(packageDefinition);
 const HandlerService = grpcPkg.xray.app.proxyman.command.HandlerService;
+
+const statsPackageDef = protoLoader.loadSync(path.join(PROTO_DIR, 'stats_command.proto'), {
+  includeDirs: [PROTO_DIR],
+  keepCase: true,
+});
+const StatsService = grpc.loadPackageDefinition(statsPackageDef).xray.app.stats.command
+  .StatsService;
 
 const root = protobuf.loadSync([
   path.join(PROTO_DIR, 'command.proto'),
@@ -86,6 +94,50 @@ function getApiClient() {
     apiClient = new HandlerService(API_ADDR, grpc.credentials.createInsecure());
   }
   return apiClient;
+}
+
+let statsClient = null;
+function getStatsClient() {
+  if (!statsClient) {
+    statsClient = new StatsService(API_ADDR, grpc.credentials.createInsecure());
+  }
+  return statsClient;
+}
+
+// Трафик по пользователям (email): дельта с прошлого опроса (reset=true).
+function queryUserTraffic() {
+  return new Promise((resolve, reject) => {
+    getStatsClient().QueryStats({ pattern: 'user>>>', reset: true }, (err, resp) => {
+      if (err) return reject(err);
+      const byEmail = {};
+      for (const s of (resp && resp.stat) || []) {
+        const parts = s.name.split('>>>'); // user>>><email>>>traffic>>><uplink|downlink>
+        if (parts.length !== 4 || parts[0] !== 'user' || parts[2] !== 'traffic') continue;
+        const email = parts[1];
+        byEmail[email] = byEmail[email] || { email, uplink: 0, downlink: 0 };
+        if (parts[3] === 'uplink') byEmail[email].uplink = Number(s.value) || 0;
+        else if (parts[3] === 'downlink') byEmail[email].downlink = Number(s.value) || 0;
+      }
+      resolve(Object.values(byEmail));
+    });
+  });
+}
+
+// CPU/RAM узла (хостовые значения; контейнер видит /proc хоста).
+function systemMetrics() {
+  const cores = os.cpus().length || 1;
+  const load1 = os.loadavg()[0] || 0;
+  const cpuPercent = Math.min(100, Math.round((load1 / cores) * 100));
+  let memPercent;
+  try {
+    const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
+    const total = Number(/MemTotal:\s+(\d+)/.exec(meminfo)[1]);
+    const avail = Number(/MemAvailable:\s+(\d+)/.exec(meminfo)[1]);
+    memPercent = Math.round(((total - avail) / total) * 100);
+  } catch {
+    memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100);
+  }
+  return { cpuPercent, memPercent, cores, loadavg: load1, clients: clients.length };
 }
 
 function alterInbound(operationTypedMessage) {
@@ -208,6 +260,18 @@ app.delete('/clients/:uuid', async (req, res) => {
     res.status(502).json({ error: e.message });
   }
 });
+
+// Трафик по пользователям (дельта с прошлого опроса) — backend накапливает.
+app.get('/stats', async (_req, res) => {
+  try {
+    res.json(await queryUserTraffic());
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Нагрузка узла (CPU/RAM в процентах).
+app.get('/metrics', (_req, res) => res.json(systemMetrics()));
 
 startXray();
 app.listen(PORT, '0.0.0.0', () => console.log(`[agent] HTTP API на :${PORT}`));

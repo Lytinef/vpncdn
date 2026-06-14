@@ -22,7 +22,7 @@ class HomeScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('VPN-CDN'),
+        title: const Text('Unway'),
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline),

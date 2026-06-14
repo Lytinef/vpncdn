@@ -77,12 +77,20 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             Text(canceled
                 ? 'Отменена. Доступ до ${_fmt(sub.currentPeriodEnd)}'
                 : 'Активна. Продление ${_fmt(sub.currentPeriodEnd)}'),
-            if (sub.nextPlan != null)
+            if (sub.nextPlan != null) ...[
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text('Со следующего периода: ${sub.nextPlan!.name}',
                     style: const TextStyle(color: Color(0xFF3B82F6))),
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => _action(context, (api) => api.changePlan(sub.plan.code)),
+                  child: const Text('Отменить смену тарифа'),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (canceled)
               FilledButton(

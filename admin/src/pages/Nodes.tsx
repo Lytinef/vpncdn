@@ -61,6 +61,7 @@ export default function Nodes() {
             <th>Origin</th>
             <th>WS</th>
             <th>Устройств</th>
+            <th>CPU / RAM</th>
             <th>API</th>
             <th>Активен</th>
             <th></th>
@@ -74,6 +75,7 @@ export default function Nodes() {
               <td>{n.originHost}</td>
               <td>{n.wsPath}</td>
               <td>{n.devices} / {n.capacity}</td>
+              <td>{n.cpuPercent ?? '—'}% / {n.memPercent ?? '—'}%</td>
               <td>{n.hasApi ? '✓' : '—'}</td>
               <td>
                 <span className={`badge ${n.isActive ? 'ok' : 'danger'}`}>

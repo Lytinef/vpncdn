@@ -63,6 +63,13 @@ export class Device {
   @Column({ type: 'timestamptz', nullable: true })
   lastSeenAt: Date | null;
 
+  /** Накопленный трафик в байтах (bigint хранится строкой в JS). */
+  @Column({ type: 'bigint', default: 0 })
+  uplinkBytes: string;
+
+  @Column({ type: 'bigint', default: 0 })
+  downlinkBytes: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

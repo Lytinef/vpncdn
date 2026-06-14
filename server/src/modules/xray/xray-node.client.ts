@@ -49,6 +49,26 @@ export class XrayNodeClient {
     }
   }
 
+  /** Трафик по пользователям с узла (дельта с прошлого опроса). */
+  async getStats(node: Node): Promise<Array<{ email: string; uplink: number; downlink: number }>> {
+    if (!node.apiUrl) return [];
+    const { data } = await axios.get(`${node.apiUrl.replace(/\/$/, '')}/stats`, {
+      headers: this.authHeader(node),
+      timeout: 10000,
+    });
+    return Array.isArray(data) ? data : [];
+  }
+
+  /** Метрики нагрузки узла (CPU/RAM, %). */
+  async getMetrics(node: Node): Promise<{ cpuPercent: number; memPercent: number } | null> {
+    if (!node.apiUrl) return null;
+    const { data } = await axios.get(`${node.apiUrl.replace(/\/$/, '')}/metrics`, {
+      headers: this.authHeader(node),
+      timeout: 10000,
+    });
+    return data ?? null;
+  }
+
   private authHeader(node: Node): Record<string, string> {
     return node.apiSecret ? { Authorization: `Bearer ${node.apiSecret}` } : {};
   }

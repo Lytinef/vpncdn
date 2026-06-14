@@ -76,11 +76,24 @@ object XrayConfigBuilder {
 
         // ── routing ──
         val rules = JSONArray()
-        // Приватные сети — напрямую.
+        // Приватные сети — напрямую (явные CIDR, без geoip.dat — его нет в приложении).
         rules.put(
             JSONObject()
                 .put("type", "field")
-                .put("ip", JSONArray(listOf("geoip:private")))
+                .put(
+                    "ip",
+                    JSONArray(
+                        listOf(
+                            "10.0.0.0/8",
+                            "172.16.0.0/12",
+                            "192.168.0.0/16",
+                            "127.0.0.0/8",
+                            "::1/128",
+                            "fc00::/7",
+                            "fe80::/10",
+                        ),
+                    ),
+                )
                 .put("outboundTag", "direct"),
         )
         // Обход блокировок: РФ-домены идут мимо туннеля.
@@ -95,7 +108,7 @@ object XrayConfigBuilder {
             )
         }
         val routing = JSONObject()
-            .put("domainStrategy", "IPIfNonMatch")
+            .put("domainStrategy", "AsIs")
             .put("rules", rules)
         root.put("routing", routing)
 

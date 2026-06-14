@@ -12,7 +12,7 @@
         tools:ignore="QueryAllPackagesPermission" />
 
     <application
-        android:label="VPN-CDN"
+        android:label="Unway"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 

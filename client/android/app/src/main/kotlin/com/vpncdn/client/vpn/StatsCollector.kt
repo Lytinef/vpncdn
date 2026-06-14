@@ -11,34 +11,32 @@ import java.net.Socket
 
 /**
  * Периодически замеряет пинг и скорость загрузки/отдачи и публикует через VpnBus.
- *  - скорость: дельта накопленного трафика proxy за интервал;
+ *  - скорость: Xray QueryStats СБРАСЫВАет счётчик при чтении, т.е. возвращает
+ *    трафик за интервал с прошлого опроса — это уже готовая дельта;
  *  - пинг: TCP-хендшейк до публичного хоста (через туннель).
  */
 class StatsCollector(
     private val scope: CoroutineScope,
-    private val trafficProvider: () -> Pair<Long, Long>, // uplink, downlink (накопительно)
+    private val trafficProvider: () -> Pair<Long, Long>, // uplink, downlink за интервал (дельта)
 ) {
     private var job: kotlinx.coroutines.Job? = null
     private val intervalMs = 1500L
 
     fun start() {
-        var lastUp = 0L
-        var lastDown = 0L
         var lastTs = System.currentTimeMillis()
         job = scope.launch(Dispatchers.IO) {
-            // первичная инициализация базовых значений
-            trafficProvider().let { lastUp = it.first; lastDown = it.second }
+            // первичный опрос обнуляет счётчики (отбрасываем накопленное до старта)
+            trafficProvider()
+            lastTs = System.currentTimeMillis()
             while (isActive) {
                 delay(intervalMs)
                 val now = System.currentTimeMillis()
-                val (up, down) = trafficProvider()
+                val (up, down) = trafficProvider() // уже дельта за интервал
                 val dt = (now - lastTs).coerceAtLeast(1) / 1000.0
-                val upMbps = bytesToMbps(up - lastUp, dt)
-                val downMbps = bytesToMbps(down - lastDown, dt)
-                lastUp = up; lastDown = down; lastTs = now
+                lastTs = now
 
                 val ping = measurePing()
-                VpnBus.setStats(ping, round1(downMbps), round1(upMbps))
+                VpnBus.setStats(ping, round1(bytesToMbps(down, dt)), round1(bytesToMbps(up, dt)))
             }
         }
     }

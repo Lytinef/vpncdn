@@ -14,9 +14,30 @@ interface UserDetailData {
     isBlocked: boolean;
     createdAt: string;
   };
+  traffic: { uplinkBytes: number; downlinkBytes: number; totalBytes: number };
   subscriptions: (SubscriptionView | null)[];
-  devices: { id: string; name: string; platform: string; isActive: boolean; lastSeenAt: string | null }[];
+  devices: {
+    id: string;
+    name: string;
+    platform: string;
+    isActive: boolean;
+    lastSeenAt: string | null;
+    uplinkBytes: number;
+    downlinkBytes: number;
+  }[];
   payments: { id: string; amountRub: number; status: string; purpose: string; createdAt: string }[];
+}
+
+function fmtBytes(n: number): string {
+  if (!n) return '0';
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 export default function UserDetail() {
@@ -47,6 +68,12 @@ export default function UserDetail() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const removeDevice = async (deviceId: string) => {
+    if (!confirm('Отозвать устройство? Доступ к VPN на нём прекратится.')) return;
+    await api.del(`/admin/users/${id}/devices/${deviceId}`);
+    load();
   };
 
   const toggleBlock = async () => {
@@ -189,13 +216,19 @@ export default function UserDetail() {
       </table>
 
       <h2>Устройства ({data.devices.length})</h2>
+      <p className="muted">
+        Всего трафика: ↓ {fmtBytes(data.traffic.downlinkBytes)} · ↑ {fmtBytes(data.traffic.uplinkBytes)} ·
+        Σ {fmtBytes(data.traffic.totalBytes)}
+      </p>
       <table className="table">
         <thead>
           <tr>
             <th>Название</th>
             <th>Платформа</th>
             <th>Активно</th>
+            <th>Трафик (↓ / ↑)</th>
             <th>Последняя активность</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -204,7 +237,13 @@ export default function UserDetail() {
               <td>{d.name}</td>
               <td>{d.platform}</td>
               <td>{d.isActive ? 'да' : 'нет'}</td>
+              <td>{fmtBytes(d.downlinkBytes)} / {fmtBytes(d.uplinkBytes)}</td>
               <td>{d.lastSeenAt ? new Date(d.lastSeenAt).toLocaleString('ru-RU') : '—'}</td>
+              <td>
+                <button className="btn danger sm" onClick={() => removeDevice(d.id)}>
+                  Отозвать
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>

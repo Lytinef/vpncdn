@@ -12,7 +12,7 @@ class VpnApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'VPN-CDN',
+      title: 'Unway',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: Consumer<AuthController>(

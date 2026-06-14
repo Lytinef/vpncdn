@@ -27,6 +27,15 @@ android {
             // Подписываем debug-ключом, чтобы `flutter run --release` работал.
             // TODO: подключить релизный keystore.
             signingConfig = signingConfigs.getByName("debug")
+            // R8 вырезает методы go.Seq (вызываются только из нативного кода libgojni
+            // через JNI) → краш "failed to find method Seq.getRef". Отключаем shrink;
+            // keep-правила в proguard-rules.pro оставлены на случай включения минификации.
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 

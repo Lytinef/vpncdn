@@ -35,6 +35,16 @@ export class XrayService {
     await this.nodeClient.removeClient(node, device.xrayUuid, this.emailFor(device));
   }
 
+  /** Трафик по пользователям с узла (дельта). */
+  fetchStats(node: Node) {
+    return this.nodeClient.getStats(node);
+  }
+
+  /** Метрики нагрузки узла. */
+  fetchMetrics(node: Node) {
+    return this.nodeClient.getMetrics(node);
+  }
+
   /** Собирает конфигурацию подключения для клиента. */
   buildConnection(node: Node, device: Device): VlessConnection {
     const uri =

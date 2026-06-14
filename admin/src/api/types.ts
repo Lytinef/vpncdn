@@ -17,11 +17,30 @@ export interface SubscriptionView {
   cancelAtPeriodEnd: boolean;
 }
 
+export interface NodeLoad {
+  id: string;
+  name: string;
+  cpuPercent: number | null;
+  memPercent: number | null;
+  metricsAt: string | null;
+}
+
+export interface ServerLoad {
+  nodesTotal: number;
+  nodesReporting: number;
+  avgCpuPercent: number | null;
+  maxCpuPercent: number | null;
+  avgMemPercent: number | null;
+  maxMemPercent: number | null;
+  nodes: NodeLoad[];
+}
+
 export interface DashboardStats {
   usersTotal: number;
   activeSubscriptions: number;
   activeDevices: number;
   revenueThisMonthRub: number;
+  serverLoad: ServerLoad;
 }
 
 export interface UserListItem {
@@ -64,6 +83,9 @@ export interface NodeView {
   isActive: boolean;
   hasApi: boolean;
   devices: number;
+  cpuPercent: number | null;
+  memPercent: number | null;
+  metricsAt: string | null;
 }
 
 export interface BypassEntryView {

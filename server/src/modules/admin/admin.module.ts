@@ -7,11 +7,13 @@ import { User } from '../users/entities/user.entity';
 import { Subscription } from '../subscriptions/entities/subscription.entity';
 import { Payment } from '../payments/entities/payment.entity';
 import { Device } from '../devices/entities/device.entity';
+import { Node } from '../nodes/entities/node.entity';
 import { UsersModule } from '../users/users.module';
 import { NodesModule } from '../nodes/nodes.module';
 import { BypassModule } from '../bypass/bypass.module';
 import { AccountModule } from '../account/account.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { DevicesModule } from '../devices/devices.module';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminService } from './admin.service';
 import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
@@ -23,12 +25,13 @@ import { AdminBypassController } from './admin-bypass.controller';
   imports: [
     PassportModule,
     JwtModule.register({}),
-    TypeOrmModule.forFeature([AdminUser, User, Subscription, Payment, Device]),
+    TypeOrmModule.forFeature([AdminUser, User, Subscription, Payment, Device, Node]),
     UsersModule,
     NodesModule,
     BypassModule,
     AccountModule,
     SubscriptionsModule,
+    DevicesModule,
   ],
   providers: [AdminAuthService, AdminService, AdminJwtStrategy],
   controllers: [AdminController, AdminNodesController, AdminBypassController],

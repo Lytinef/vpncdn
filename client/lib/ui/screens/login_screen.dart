@@ -20,7 +20,7 @@ class LoginScreen extends StatelessWidget {
               const Spacer(),
               const Icon(Icons.vpn_lock, size: 72, color: Color(0xFF3B82F6)),
               const SizedBox(height: 24),
-              Text('VPN-CDN',
+              Text('Unway',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium),
               const SizedBox(height: 8),

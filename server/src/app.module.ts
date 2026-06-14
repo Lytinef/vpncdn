@@ -18,6 +18,7 @@ import { DevicesModule } from './modules/devices/devices.module';
 import { BypassModule } from './modules/bypass/bypass.module';
 import { AccountModule } from './modules/account/account.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { StatsModule } from './modules/stats/stats.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AdminModule } from './modules/admin/admin.module';
     BypassModule,
     AccountModule,
     AdminModule,
+    StatsModule,
   ],
   controllers: [AppController],
 })
