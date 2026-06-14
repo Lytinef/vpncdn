@@ -1,0 +1,15 @@
+# Нормализация переносов строк: в репозитории и на Linux-сервере всегда LF
+# (важно для Dockerfile и shell-скриптов, иначе CRLF ломает их на Linux).
+* text=auto eol=lf
+
+# Бинарные файлы — без преобразований
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.aar binary
+*.jar binary
+*.keystore binary
+*.jks binary
+*.dat binary

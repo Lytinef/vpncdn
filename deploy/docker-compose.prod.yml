@@ -63,6 +63,25 @@ services:
     expose:
       - "80"
 
+  # VPN-узел (Xray + агент) на том же VPS. Backend обращается к нему по имени
+  # сервиса: в админке URL агента = http://xray-node:8090 (одна docker-сеть).
+  xray-node:
+    build:
+      context: ../xray
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
+      INBOUND_TAG: vless-in
+    volumes:
+      - ../xray/cert:/etc/xray/cert:ro
+      - ../xray/data:/data
+    expose:
+      - "8090"
+    ports:
+      # origin для NGENIX (TLS). Закрыть фаерволом для подсетей NGENIX.
+      - "8443:8443"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
