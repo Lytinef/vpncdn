@@ -1,60 +1,55 @@
 package com.vpncdn.client.vpn
 
 import android.util.Log
+import libv2ray.CoreCallbackHandler
+import libv2ray.CoreController
 import libv2ray.Libv2ray
-import libv2ray.V2RayPoint
-import libv2ray.V2RayVPNServiceSupportsSet
 
 /**
- * (flavor full) Обёртка над Xray-core (gomobile-биндинг libv2ray, см. xray/MOBILE.md).
+ * (flavor full) Обёртка над Xray-core (gomobile-биндинг AndroidLibXrayLite, см. xray/MOBILE.md).
  *
  * Запускает Xray с SOCKS-инбаундом и VLESS+WS+TLS аутбаундом.
- * protect() защищает сокеты ядра от попадания обратно в туннель — это
- * обязательно для outbound «direct» (домены обхода) и для самого VLESS.
+ * Защита сокетов ядра от петли через туннель обеспечивается на уровне VpnService:
+ * наше приложение исключено из VPN (addDisallowedApplication), поэтому исходящие
+ * соединения Xray (он работает в нашем процессе) идут мимо туннеля.
  */
 class XrayCore(
-    private val protector: (Long) -> Boolean,
     private val onStatus: (String) -> Unit,
 ) {
-    private var point: V2RayPoint? = null
+    private var controller: CoreController? = null
 
-    val isRunning: Boolean get() = point?.isRunning ?: false
+    val isRunning: Boolean get() = controller?.isRunning ?: false
 
-    fun start(configJson: String, proxyDomainPort: String) {
-        val supportsSet = object : V2RayVPNServiceSupportsSet {
-            override fun setup(s: String): Long = 0
-            override fun prepare(): Long = 0
+    fun start(configJson: String) {
+        val handler = object : CoreCallbackHandler {
+            override fun startup(): Long = 0
             override fun shutdown(): Long = 0
-            override fun protect(fd: Long): Boolean = protector(fd)
             override fun onEmitStatus(code: Long, message: String?): Long {
                 onStatus(message ?: "")
                 return 0
             }
         }
-        val p = Libv2ray.newV2RayPoint(supportsSet, false)
-        p.configureFileContent = configJson
-        p.domainName = proxyDomainPort
-        p.runLoop(false)
-        point = p
+        val c = Libv2ray.newCoreController(handler)
+        // tunFd=0 — TUN обрабатывает tun2socks, ядру TUN не передаём.
+        c.startLoop(configJson, 0)
+        controller = c
         Log.i(TAG, "Xray запущен")
     }
 
     fun stop() {
         try {
-            point?.stopLoop()
+            controller?.stopLoop()
         } catch (e: Exception) {
             Log.w(TAG, "stopLoop: ${e.message}")
         }
-        point = null
+        controller = null
     }
 
     /** Накопленный трафик аутбаунда proxy (uplink/downlink) в байтах. */
     fun queryTraffic(): Pair<Long, Long> {
-        val p = point ?: return 0L to 0L
+        val c = controller ?: return 0L to 0L
         return try {
-            val up = p.queryStats("proxy", "uplink")
-            val down = p.queryStats("proxy", "downlink")
-            up to down
+            c.queryStats("proxy", "uplink") to c.queryStats("proxy", "downlink")
         } catch (_: Exception) {
             0L to 0L
         }

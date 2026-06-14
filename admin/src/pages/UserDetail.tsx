@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-import { SubscriptionView } from '../api/types';
+import { SubscriptionView, PlanView } from '../api/types';
 
 interface UserDetailData {
   user: {
@@ -23,9 +23,31 @@ export default function UserDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState<UserDetailData | null>(null);
+  const [plans, setPlans] = useState<PlanView[]>([]);
+  const [planCode, setPlanCode] = useState('start');
+  const [days, setDays] = useState(30);
+  const [busy, setBusy] = useState(false);
 
   const load = () => api.get<UserDetailData>(`/admin/users/${id}`).then(setData);
   useEffect(() => void load(), [id]);
+  useEffect(() => {
+    api.get<PlanView[]>('/plans').then((p) => {
+      setPlans(p);
+      if (p.length) setPlanCode(p[0].code);
+    });
+  }, []);
+
+  const subAction = async (path: string, body?: unknown) => {
+    setBusy(true);
+    try {
+      await api.post(`/admin/users/${id}/subscription/${path}`, body);
+      await load();
+    } catch (e) {
+      alert('Ошибка: ' + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const toggleBlock = async () => {
     if (!data) return;
@@ -41,6 +63,7 @@ export default function UserDetail() {
 
   if (!data) return <div>Загрузка…</div>;
   const u = data.user;
+  const current = data.subscriptions.find(Boolean) as SubscriptionView | undefined;
 
   return (
     <div>
@@ -75,6 +98,69 @@ export default function UserDetail() {
           <button className="btn danger" onClick={removeUser}>
             Удалить аккаунт
           </button>
+        </div>
+      </div>
+
+      <h2>Управление подпиской</h2>
+      <div className="card">
+        <div className="muted" style={{ marginBottom: 10 }}>
+          {current
+            ? `Текущая: ${current.plan.name} · ${current.status} · до ${
+                current.currentPeriodEnd
+                  ? new Date(current.currentPeriodEnd).toLocaleDateString('ru-RU')
+                  : '—'
+              }`
+            : 'Подписки нет'}
+        </div>
+
+        <div className="form-inline" style={{ marginBottom: 12 }}>
+          <select value={planCode} onChange={(e) => setPlanCode(e.target.value)}>
+            {plans.map((p) => (
+              <option key={p.code} value={p.code}>
+                {p.name} · {p.priceRub} ₽ · {p.deviceLimit} устр.
+              </option>
+            ))}
+          </select>
+          <input
+            type="number"
+            min={1}
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            style={{ width: 90 }}
+            title="дней"
+          />
+          <button className="btn primary" disabled={busy} onClick={() => subAction('grant', { planCode, days })}>
+            Выдать / обновить
+          </button>
+          <button className="btn" disabled={busy} onClick={() => subAction('extend', { days })}>
+            Продлить на {days} дн.
+          </button>
+        </div>
+
+        <div className="actions">
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() => subAction('change-plan', { planCode, immediate: true })}
+          >
+            Сменить тариф сейчас
+          </button>
+          <button
+            className="btn"
+            disabled={busy}
+            onClick={() => subAction('change-plan', { planCode, immediate: false })}
+          >
+            Сменить со след. периода
+          </button>
+          {current?.cancelAtPeriodEnd ? (
+            <button className="btn" disabled={busy} onClick={() => subAction('resume')}>
+              Возобновить
+            </button>
+          ) : (
+            <button className="btn danger" disabled={busy} onClick={() => subAction('cancel')}>
+              Отменить
+            </button>
+          )}
         </div>
       </div>
 

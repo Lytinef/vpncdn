@@ -82,10 +82,9 @@ class VpnConnectionService : VpnService() {
                 bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
             )
             xray = XrayCore(
-                protector = { fd -> protect(fd.toInt()) },
                 onStatus = { Log.i(TAG, "xray: $it") },
             ).also {
-                it.start(xrayConfig, "${conn.getString("address")}:${conn.getInt("port")}")
+                it.start(xrayConfig)
             }
 
             // 3) tun2socks: TUN → SOCKS Xray.

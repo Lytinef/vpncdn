@@ -11,6 +11,7 @@ import { UsersModule } from '../users/users.module';
 import { NodesModule } from '../nodes/nodes.module';
 import { BypassModule } from '../bypass/bypass.module';
 import { AccountModule } from '../account/account.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminService } from './admin.service';
 import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
@@ -27,6 +28,7 @@ import { AdminBypassController } from './admin-bypass.controller';
     NodesModule,
     BypassModule,
     AccountModule,
+    SubscriptionsModule,
   ],
   providers: [AdminAuthService, AdminService, AdminJwtStrategy],
   controllers: [AdminController, AdminNodesController, AdminBypassController],

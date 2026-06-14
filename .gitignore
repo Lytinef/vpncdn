@@ -26,6 +26,9 @@ client/**/*.keystore
 client/**/*.jks
 client/ios/Pods/
 client/windows/flutter/ephemeral/
+# Клиентские нативные VPN-библиотеки (большие, пересобираются — см. xray/MOBILE.md)
+client/android/app/libs/
+client/android/app/src/*/jniLibs/
 
 # IDE / OS
 .idea/

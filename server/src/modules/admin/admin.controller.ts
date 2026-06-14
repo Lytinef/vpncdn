@@ -17,6 +17,13 @@ import { AdminJwtGuard } from './guards/admin-jwt.guard';
 import { CurrentAdmin, AuthAdmin } from '../../common/decorators/current-admin.decorator';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { PaymentStatus } from '../payments/entities/payment.entity';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { serializeSubscription } from '../subscriptions/subscriptions.serializer';
+import {
+  AdminGrantSubscriptionDto,
+  AdminExtendDto,
+  AdminChangePlanDto,
+} from './dto/subscription.dto';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -24,6 +31,7 @@ export class AdminController {
   constructor(
     private readonly adminAuth: AdminAuthService,
     private readonly admin: AdminService,
+    private readonly subscriptions: SubscriptionsService,
   ) {}
 
   @Post('auth/login')
@@ -86,6 +94,55 @@ export class AdminController {
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteUser(@Param('id') id: string) {
     return this.admin.deleteUser(id);
+  }
+
+  // ── управление подпиской пользователя ──
+
+  /** Выдать/обновить подписку вручную (без оплаты). */
+  @Post('users/:id/subscription/grant')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  async grantSubscription(@Param('id') id: string, @Body() dto: AdminGrantSubscriptionDto) {
+    const sub = await this.subscriptions.adminGrant(id, dto.planCode, dto.days);
+    return serializeSubscription(sub);
+  }
+
+  /** Продлить текущий период на N дней. */
+  @Post('users/:id/subscription/extend')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  async extendSubscription(@Param('id') id: string, @Body() dto: AdminExtendDto) {
+    const sub = await this.subscriptions.adminExtend(id, dto.days);
+    return serializeSubscription(sub);
+  }
+
+  /** Сменить тариф (немедленно или со следующего периода). */
+  @Post('users/:id/subscription/change-plan')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  async changeUserPlan(@Param('id') id: string, @Body() dto: AdminChangePlanDto) {
+    const sub = dto.immediate
+      ? await this.subscriptions.adminChangePlanNow(id, dto.planCode)
+      : await this.subscriptions.changePlan(id, dto.planCode);
+    return serializeSubscription(sub);
+  }
+
+  /** Отменить подписку (доступ до конца периода). */
+  @Post('users/:id/subscription/cancel')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  async cancelSubscription(@Param('id') id: string) {
+    const sub = await this.subscriptions.cancelAtPeriodEnd(id);
+    return serializeSubscription(sub);
+  }
+
+  /** Возобновить отменённую подписку. */
+  @Post('users/:id/subscription/resume')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  async resumeSubscription(@Param('id') id: string) {
+    const sub = await this.subscriptions.resume(id);
+    return serializeSubscription(sub);
   }
 
   @Get('payments')

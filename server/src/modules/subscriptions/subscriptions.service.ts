@@ -200,6 +200,59 @@ export class SubscriptionsService {
     return this.subs.save(sub);
   }
 
+  // ── админские операции (без оплаты) ──
+
+  /** Ручная выдача/обновление подписки админом (без платежа, без автопродления). */
+  async adminGrant(userId: string, planCode: PlanCode, days?: number): Promise<Subscription> {
+    const plan = await this.getPlanByCode(planCode);
+    if (!plan) throw new NotFoundException('Тариф не найден');
+    const now = new Date();
+    let sub = await this.getLatest(userId);
+    if (!sub) sub = this.subs.create({ userId });
+    sub.planId = plan.id;
+    sub.plan = plan;
+    sub.nextPlanId = null;
+    sub.nextPlan = null;
+    sub.status = SubscriptionStatus.ACTIVE;
+    sub.currentPeriodStart = now;
+    sub.currentPeriodEnd = this.addDays(now, days && days > 0 ? days : plan.durationDays);
+    sub.cancelAtPeriodEnd = false;
+    sub.canceledAt = null;
+    sub.autoRenew = false; // ручная выдача без сохранённой карты
+    sub.failedRenewals = 0;
+    this.logger.log(`Админ: подписка ${sub.id} выдана (${plan.code}) до ${sub.currentPeriodEnd.toISOString()}`);
+    return this.subs.save(sub);
+  }
+
+  /** Продление периода админом на N дней. */
+  async adminExtend(userId: string, days: number): Promise<Subscription> {
+    const sub = await this.getLatest(userId);
+    if (!sub) throw new NotFoundException('Подписка не найдена');
+    const base =
+      sub.currentPeriodEnd && sub.currentPeriodEnd.getTime() > Date.now()
+        ? sub.currentPeriodEnd
+        : new Date();
+    sub.currentPeriodEnd = this.addDays(base, days);
+    if (sub.status === SubscriptionStatus.EXPIRED || sub.status === SubscriptionStatus.PENDING) {
+      sub.status = SubscriptionStatus.ACTIVE;
+      sub.currentPeriodStart = sub.currentPeriodStart ?? new Date();
+    }
+    return this.subs.save(sub);
+  }
+
+  /** Немедленная смена тарифа админом (с текущего момента). */
+  async adminChangePlanNow(userId: string, planCode: PlanCode): Promise<Subscription> {
+    const sub = await this.getLatest(userId);
+    if (!sub) throw new NotFoundException('Подписка не найдена');
+    const plan = await this.getPlanByCode(planCode);
+    if (!plan) throw new NotFoundException('Тариф не найден');
+    sub.planId = plan.id;
+    sub.plan = plan;
+    sub.nextPlanId = null;
+    sub.nextPlan = null;
+    return this.subs.save(sub);
+  }
+
   async markPastDue(subscriptionId: string): Promise<void> {
     const sub = await this.getById(subscriptionId);
     if (!sub) return;

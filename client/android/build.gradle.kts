@@ -2,6 +2,8 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+        // Локальные .aar (libxray.aar) из app/libs — для flavor full.
+        flatDir { dirs("libs") }
     }
 }
 

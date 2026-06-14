@@ -57,6 +57,7 @@ flutter {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-    // Только для flavor full: нативные библиотеки из app/libs/ (см. xray/MOBILE.md)
-    "fullImplementation"(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+    // Классы Xray-ядра (app/libs/libxray.jar) — компиляция и упаковка в dex.
+    // Используются только во flavor full; нативные .so — в src/full/jniLibs/.
+    implementation(files("libs/libxray.jar"))
 }
