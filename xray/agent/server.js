@@ -123,11 +123,31 @@ function queryUserTraffic() {
   });
 }
 
+// Снимок агрегированного CPU из /proc/stat.
+function readCpuSnapshot() {
+  const line = fs.readFileSync('/proc/stat', 'utf8').split('\n')[0]; // "cpu  u n s i iowait irq softirq steal ..."
+  const v = line.trim().split(/\s+/).slice(1).map(Number);
+  const idle = (v[3] || 0) + (v[4] || 0); // idle + iowait
+  const total = v.reduce((a, b) => a + (b || 0), 0);
+  return { idle, total };
+}
+
 // CPU/RAM узла (хостовые значения; контейнер видит /proc хоста).
-function systemMetrics() {
-  const cores = os.cpus().length || 1;
-  const load1 = os.loadavg()[0] || 0;
-  const cpuPercent = Math.min(100, Math.round((load1 / cores) * 100));
+// CPU — реальная утилизация по дельте /proc/stat, не loadavg.
+async function systemMetrics() {
+  let cpuPercent;
+  try {
+    const a = readCpuSnapshot();
+    await new Promise((r) => setTimeout(r, 250));
+    const b = readCpuSnapshot();
+    const dt = b.total - a.total;
+    const di = b.idle - a.idle;
+    cpuPercent = dt > 0 ? Math.max(0, Math.min(100, Math.round((1 - di / dt) * 100))) : 0;
+  } catch {
+    const cores = os.cpus().length || 1;
+    cpuPercent = Math.min(100, Math.round(((os.loadavg()[0] || 0) / cores) * 100));
+  }
+
   let memPercent;
   try {
     const meminfo = fs.readFileSync('/proc/meminfo', 'utf8');
@@ -137,7 +157,7 @@ function systemMetrics() {
   } catch {
     memPercent = Math.round(((os.totalmem() - os.freemem()) / os.totalmem()) * 100);
   }
-  return { cpuPercent, memPercent, cores, loadavg: load1, clients: clients.length };
+  return { cpuPercent, memPercent, cores: os.cpus().length || 1, clients: clients.length };
 }
 
 function alterInbound(operationTypedMessage) {
@@ -271,7 +291,13 @@ app.get('/stats', async (_req, res) => {
 });
 
 // Нагрузка узла (CPU/RAM в процентах).
-app.get('/metrics', (_req, res) => res.json(systemMetrics()));
+app.get('/metrics', async (_req, res) => {
+  try {
+    res.json(await systemMetrics());
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
 
 startXray();
 app.listen(PORT, '0.0.0.0', () => console.log(`[agent] HTTP API на :${PORT}`));
