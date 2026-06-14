@@ -1,0 +1,41 @@
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+.pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+*.crt
+!**/*.example
+
+# Flutter
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/build/
+client/android/.gradle/
+client/android/local.properties
+client/android/key.properties
+client/**/*.keystore
+client/**/*.jks
+client/ios/Pods/
+client/windows/flutter/ephemeral/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Admin
+admin/dist/
+admin/node_modules/
+
+# Docker volumes
+deploy/data/

@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package xray.common.serial;
+option go_package = "github.com/xtls/xray-core/common/serial";
+
+// Соответствует xray.common.serial.TypedMessage.
+// type — полное имя proto-сообщения (напр. "xray.proxy.vless.Account"),
+// value — сериализованные байты этого сообщения.
+message TypedMessage {
+  string type = 1;
+  bytes value = 2;
+}

@@ -1,0 +1,78 @@
+# Прод-стек control-plane (backend + админка + БД + Redis + Caddy для TLS).
+# Запуск: docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env up -d --build
+#
+# Перед запуском:
+#   - заполнить server/.env (ключи YooKassa/Telegram/JWT и т.д.)
+#   - заполнить deploy/.env (домены, пароль БД)
+#   - прописать домены в deploy/Caddyfile
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vpn}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-vpn}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vpn}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    env_file:
+      - ../server/.env
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      REDIS_HOST: redis
+    expose:
+      - "3000"
+
+  admin:
+    build:
+      context: ../admin
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${ADMIN_API_BASE_URL:?set ADMIN_API_BASE_URL}
+    restart: unless-stopped
+    depends_on:
+      - server
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - server
+      - admin
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config

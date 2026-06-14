@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package xray.common.protocol;
+option go_package = "github.com/xtls/xray-core/common/protocol";
+
+import "typed_message.proto";
+
+message User {
+  uint32 level = 1;
+  string email = 2;
+  // account — TypedMessage с конкретным аккаунтом протокола (VLESS Account и т.п.)
+  xray.common.serial.TypedMessage account = 3;
+}

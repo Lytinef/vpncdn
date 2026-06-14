@@ -1,0 +1,66 @@
+import '../models/models.dart';
+import 'api_client.dart';
+
+/// Типизированные вызовы backend поверх ApiClient.
+class Api {
+  final ApiClient _c;
+  Api(this._c);
+
+  // ── аккаунт ──
+  Future<AccountState> me() async => AccountState.fromJson(await _c.get('/users/me'));
+
+  Future<void> logoutAll() => _c.post('/users/me/logout-all');
+
+  Future<void> deleteAccount() => _c.delete('/users/me');
+
+  Future<void> logout(String refreshToken) =>
+      _c.post('/auth/logout', body: {'refreshToken': refreshToken}, auth: false);
+
+  // ── подписки ──
+  Future<List<Plan>> plans() async {
+    final list = await _c.get('/plans', auth: false) as List;
+    return list.map((e) => Plan.fromJson(e)).toList();
+  }
+
+  Future<Subscription?> subscription() async {
+    final r = await _c.get('/subscription');
+    return r['subscription'] != null ? Subscription.fromJson(r['subscription']) : null;
+  }
+
+  Future<void> cancelSubscription() => _c.post('/subscription/cancel');
+  Future<void> resumeSubscription() => _c.post('/subscription/resume');
+  Future<void> changePlan(String planCode) =>
+      _c.post('/subscription/change-plan', body: {'planCode': planCode});
+
+  // ── оплата ──
+  Future<Map<String, dynamic>> checkout(String planCode) async =>
+      Map<String, dynamic>.from(await _c.post('/payments/checkout', body: {'planCode': planCode}));
+
+  Future<Map<String, dynamic>> syncPayment(String id) async =>
+      Map<String, dynamic>.from(await _c.get('/payments/$id/sync'));
+
+  // ── устройства ──
+  Future<List<Device>> devices() async {
+    final list = await _c.get('/devices') as List;
+    return list.map((e) => Device.fromJson(e)).toList();
+  }
+
+  Future<Device> registerDevice({
+    required String name,
+    required String platform,
+    String? hardwareId,
+  }) async =>
+      Device.fromJson(await _c.post('/devices', body: {
+        'name': name,
+        'platform': platform,
+        if (hardwareId != null) 'hardwareId': hardwareId,
+      }));
+
+  Future<void> removeDevice(String id) => _c.delete('/devices/$id');
+
+  Future<VlessConnection> connection(String deviceId) async =>
+      VlessConnection.fromJson(await _c.get('/devices/$deviceId/connection'));
+
+  // ── список обхода ──
+  Future<BypassList> bypass() async => BypassList.fromJson(await _c.get('/bypass'));
+}

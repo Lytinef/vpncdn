@@ -1,0 +1,114 @@
+package com.vpncdn.client.vpn
+
+import org.json.JSONArray
+import org.json.JSONObject
+
+/**
+ * Формирует JSON-конфигурацию Xray-core для клиента:
+ *  - inbound SOCKS5 на 127.0.0.1:<socksPort> (туда tun2socks отдаёт трафик из TUN);
+ *  - outbound VLESS + WebSocket + TLS на CDN-домен (NGENIX);
+ *  - direct (freedom) и block (blackhole);
+ *  - правила маршрутизации: домены обхода -> direct (мимо VPN), остальное -> proxy.
+ */
+object XrayConfigBuilder {
+
+    fun build(
+        socksPort: Int,
+        uuid: String,
+        address: String,
+        port: Int,
+        sni: String,
+        wsPath: String,
+        wsHost: String,
+        bypassEnabled: Boolean,
+        bypassDomains: List<String>,
+    ): String {
+        val root = JSONObject()
+        root.put("log", JSONObject().put("loglevel", "warning"))
+
+        // ── inbound SOCKS ──
+        val inbound = JSONObject()
+            .put("tag", "socks-in")
+            .put("listen", "127.0.0.1")
+            .put("port", socksPort)
+            .put("protocol", "socks")
+            .put("settings", JSONObject().put("udp", true).put("auth", "noauth"))
+            .put(
+                "sniffing",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("destOverride", JSONArray(listOf("http", "tls", "quic"))),
+            )
+        root.put("inbounds", JSONArray().put(inbound))
+
+        // ── outbound VLESS (proxy) ──
+        val user = JSONObject()
+            .put("id", uuid)
+            .put("encryption", "none")
+            .put("level", 0)
+        val vnext = JSONObject()
+            .put("address", address)
+            .put("port", port)
+            .put("users", JSONArray().put(user))
+        val proxySettings = JSONObject().put("vnext", JSONArray().put(vnext))
+
+        val wsSettings = JSONObject()
+            .put("path", wsPath)
+            .put("headers", JSONObject().put("Host", wsHost))
+        val tlsSettings = JSONObject()
+            .put("serverName", sni)
+            .put("allowInsecure", false)
+        val stream = JSONObject()
+            .put("network", "ws")
+            .put("security", "tls")
+            .put("wsSettings", wsSettings)
+            .put("tlsSettings", tlsSettings)
+
+        val proxy = JSONObject()
+            .put("tag", "proxy")
+            .put("protocol", "vless")
+            .put("settings", proxySettings)
+            .put("streamSettings", stream)
+
+        val direct = JSONObject().put("tag", "direct").put("protocol", "freedom")
+        val block = JSONObject().put("tag", "block").put("protocol", "blackhole")
+        root.put("outbounds", JSONArray().put(proxy).put(direct).put(block))
+
+        // ── routing ──
+        val rules = JSONArray()
+        // Приватные сети — напрямую.
+        rules.put(
+            JSONObject()
+                .put("type", "field")
+                .put("ip", JSONArray(listOf("geoip:private")))
+                .put("outboundTag", "direct"),
+        )
+        // Обход блокировок: РФ-домены идут мимо туннеля.
+        if (bypassEnabled && bypassDomains.isNotEmpty()) {
+            val domains = JSONArray()
+            bypassDomains.forEach { domains.put("domain:$it") }
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("domain", domains)
+                    .put("outboundTag", "direct"),
+            )
+        }
+        val routing = JSONObject()
+            .put("domainStrategy", "IPIfNonMatch")
+            .put("rules", rules)
+        root.put("routing", routing)
+
+        // ── stats / policy (для метрик скорости через Xray API) ──
+        root.put("stats", JSONObject())
+        root.put(
+            "policy",
+            JSONObject().put(
+                "system",
+                JSONObject().put("statsOutboundUplink", true).put("statsOutboundDownlink", true),
+            ),
+        )
+
+        return root.toString()
+    }
+}

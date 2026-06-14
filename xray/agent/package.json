@@ -1,0 +1,16 @@
+{
+  "name": "vpncdn-xray-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Агент управления Xray-узлом: добавление/удаление VLESS-клиентов по HTTP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.11.1",
+    "@grpc/proto-loader": "^0.7.13",
+    "express": "^4.19.2",
+    "protobufjs": "^7.3.2"
+  }
+}

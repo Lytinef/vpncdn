@@ -1,0 +1,20 @@
+# Стек одного VPN-узла (origin за NGENIX). Разворачивается на каждом VPS.
+services:
+  xray-node:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    restart: unless-stopped
+    environment:
+      AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
+      INBOUND_TAG: vless-in
+    volumes:
+      # TLS-сертификат домена узла (выпустить certbot/acme.sh)
+      - ./cert:/etc/xray/cert:ro
+      # Персистентный список клиентов
+      - ./data:/data
+    ports:
+      # VLESS+WS+TLS — сюда ходит NGENIX (origin). Откройте только для CDN.
+      - "8443:8443"
+      # Агент управления — откройте ТОЛЬКО для IP backend (или приватная сеть).
+      - "127.0.0.1:8090:8090"

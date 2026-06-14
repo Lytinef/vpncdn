@@ -1,0 +1,16 @@
+# Caddy: автоматический HTTPS (Let's Encrypt) для API и админки.
+# Замените домены и e-mail. Caddy сам выпустит и продлит сертификаты.
+
+{
+    email admin@example.com
+}
+
+# API backend
+api.example.com {
+    reverse_proxy server:3000
+}
+
+# Веб-админка (статика на nginx внутри контейнера admin)
+admin.example.com {
+    reverse_proxy admin:80
+}
