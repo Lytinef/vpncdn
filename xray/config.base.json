@@ -34,10 +34,10 @@
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "ws",
+        "network": "xhttp",
         "security": "tls",
         "tlsSettings": {
-          "alpn": ["http/1.1"],
+          "alpn": ["h2", "http/1.1"],
           "certificates": [
             {
               "certificateFile": "/etc/xray/cert/fullchain.pem",
@@ -45,8 +45,9 @@
             }
           ]
         },
-        "wsSettings": {
-          "path": "/ws"
+        "xhttpSettings": {
+          "path": "/ws",
+          "mode": "auto"
         }
       },
       "sniffing": {

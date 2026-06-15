@@ -52,21 +52,24 @@ object XrayConfigBuilder {
             .put("users", JSONArray().put(user))
         val proxySettings = JSONObject().put("vnext", JSONArray().put(vnext))
 
-        val wsSettings = JSONObject()
-            .put("path", wsPath)
-            .put("headers", JSONObject().put("Host", wsHost))
         val tlsSettings = JSONObject()
             .put("serverName", sni)
             .put("allowInsecure", false)
+            .put("alpn", JSONArray(listOf("h2", "http/1.1")))
+        // XHTTP (SplitHTTP) — современный CDN-транспорт: устойчивее WS к буферизации/
+        // таймаутам CDN, работает по HTTP/1.1. mode=auto сам подбирает режим.
+        val xhttpSettings = JSONObject()
+            .put("path", wsPath)
+            .put("host", wsHost)
+            .put("mode", "auto")
         // TCP keepalive: пробы только при простое соединения, на throughput не влияют.
-        // Держит idle-соединения живыми и сохраняет NAT/CDN-маппинг.
         val sockopt = JSONObject()
             .put("tcpKeepAliveIdle", 30)
             .put("tcpKeepAliveInterval", 15)
         val stream = JSONObject()
-            .put("network", "ws")
+            .put("network", "xhttp")
             .put("security", "tls")
-            .put("wsSettings", wsSettings)
+            .put("xhttpSettings", xhttpSettings)
             .put("tlsSettings", tlsSettings)
             .put("sockopt", sockopt)
 
