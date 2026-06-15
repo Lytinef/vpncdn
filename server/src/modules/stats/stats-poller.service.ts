@@ -6,6 +6,7 @@ import { Node } from '../nodes/entities/node.entity';
 import { Device } from '../devices/entities/device.entity';
 import { NodesService } from '../nodes/nodes.service';
 import { XrayService } from '../xray/xray.service';
+import { AlertsService } from './alerts.service';
 
 /**
  * Раз в минуту опрашивает активные узлы:
@@ -21,6 +22,7 @@ export class StatsPollerService {
     @InjectRepository(Device) private readonly devices: Repository<Device>,
     private readonly nodesService: NodesService,
     private readonly xray: XrayService,
+    private readonly alerts: AlertsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -35,14 +37,22 @@ export class StatsPollerService {
   }
 
   private async pollNode(node: Node): Promise<void> {
-    const metrics = await this.xray.fetchMetrics(node);
-    if (metrics) {
-      await this.nodes.update(node.id, {
-        cpuPercent: metrics.cpuPercent,
-        memPercent: metrics.memPercent,
-        metricsAt: new Date(),
-      });
+    let metrics: { cpuPercent: number; memPercent: number } | null = null;
+    try {
+      metrics = await this.xray.fetchMetrics(node);
+      if (metrics) {
+        await this.nodes.update(node.id, {
+          cpuPercent: metrics.cpuPercent,
+          memPercent: metrics.memPercent,
+          metricsAt: new Date(),
+        });
+      }
+    } catch (e) {
+      this.logger.warn(`Узел ${node.name}: метрики недоступны — ${(e as Error).message}`);
+      metrics = null;
     }
+    // Алёрты по нагрузке/доступности.
+    await this.alerts.evaluate(node, metrics);
 
     const stats = await this.xray.fetchStats(node);
     for (const s of stats) {

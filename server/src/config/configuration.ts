@@ -49,6 +49,13 @@ export interface XrayConfig {
   apiSecret: string;
 }
 
+export interface AlertsConfig {
+  /** Telegram chat_id, куда слать алёрты нагрузки (пусто — выключено). */
+  telegramChatId: string;
+  cpuPercent: number;
+  memPercent: number;
+}
+
 export interface Configuration {
   app: AppConfig;
   database: DatabaseConfig;
@@ -58,6 +65,7 @@ export interface Configuration {
   yookassa: YookassaConfig;
   admin: AdminConfig;
   xray: XrayConfig;
+  alerts: AlertsConfig;
 }
 
 const num = (v: string | undefined, fallback: number): number => {
@@ -108,5 +116,10 @@ export default (): Configuration => ({
   },
   xray: {
     apiSecret: process.env.XRAY_API_SECRET ?? 'dev_xray',
+  },
+  alerts: {
+    telegramChatId: process.env.ALERT_TELEGRAM_CHAT_ID ?? '',
+    cpuPercent: num(process.env.ALERT_CPU_PERCENT, 85),
+    memPercent: num(process.env.ALERT_MEM_PERCENT, 90),
   },
 });
