@@ -112,4 +112,8 @@ class VpnEngine {
   /// Включить/выключить автозапуск при старте системы.
   Future<void> setAutoStart(bool enabled) =>
       _method.invokeMethod('setAutoStart', {'enabled': enabled});
+
+  /// Активны ли замеры пинга/скорости (только на переднем плане — экономия батареи).
+  Future<void> setStatsActive(bool active) =>
+      _method.invokeMethod('setStatsActive', {'active': active});
 }

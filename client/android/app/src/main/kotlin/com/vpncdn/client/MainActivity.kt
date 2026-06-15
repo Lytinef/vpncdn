@@ -48,6 +48,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "stage" -> result.success(VpnBus.stage)
                 "measure" -> result.success(VpnBus.lastStats)
+                "setStatsActive" -> {
+                    VpnBus.setStatsActive(call.argument<Boolean>("active") ?: true)
+                    result.success(null)
+                }
                 "installedApps" -> result.success(AppListProvider.list(this))
                 "setAutoStart" -> {
                     val enabled = call.argument<Boolean>("enabled") ?: false

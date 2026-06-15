@@ -23,12 +23,24 @@ class StatsCollector(
     private val intervalMs = 1500L
 
     fun start() {
-        var lastTs = System.currentTimeMillis()
         job = scope.launch(Dispatchers.IO) {
-            // первичный опрос обнуляет счётчики (отбрасываем накопленное до старта)
-            trafficProvider()
-            lastTs = System.currentTimeMillis()
+            var lastTs = System.currentTimeMillis()
+            var primed = false
             while (isActive) {
+                // В фоне (экран погашен/приложение свёрнуто) не делаем ни пинга, ни замеров —
+                // главный источник расхода батареи. Туннель при этом продолжает работать.
+                if (!VpnBus.statsActive) {
+                    primed = false
+                    delay(4000)
+                    continue
+                }
+                if (!primed) {
+                    trafficProvider() // обнуляем счётчик после простоя, чтобы не было скачка
+                    lastTs = System.currentTimeMillis()
+                    primed = true
+                    delay(intervalMs)
+                    continue
+                }
                 delay(intervalMs)
                 val now = System.currentTimeMillis()
                 val (up, down) = trafficProvider() // уже дельта за интервал

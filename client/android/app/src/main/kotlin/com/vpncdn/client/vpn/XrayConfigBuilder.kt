@@ -58,11 +58,17 @@ object XrayConfigBuilder {
         val tlsSettings = JSONObject()
             .put("serverName", sni)
             .put("allowInsecure", false)
+        // TCP keepalive: пробы только при простое соединения, на throughput не влияют.
+        // Держит idle-соединения живыми и сохраняет NAT/CDN-маппинг.
+        val sockopt = JSONObject()
+            .put("tcpKeepAliveIdle", 30)
+            .put("tcpKeepAliveInterval", 15)
         val stream = JSONObject()
             .put("network", "ws")
             .put("security", "tls")
             .put("wsSettings", wsSettings)
             .put("tlsSettings", tlsSettings)
+            .put("sockopt", sockopt)
 
         val proxy = JSONObject()
             .put("tag", "proxy")

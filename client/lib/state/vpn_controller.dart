@@ -82,6 +82,11 @@ class VpnController extends ChangeNotifier {
 
   Future<List<InstalledApp>> installedApps() => _engine.installedApps();
 
+  /// Замеры метрик активны только на переднем плане (экономия батареи).
+  void setStatsActive(bool active) {
+    _engine.setStatsActive(active);
+  }
+
   Future<void> connect() async {
     error = null;
     try {

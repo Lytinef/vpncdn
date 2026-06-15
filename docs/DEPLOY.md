@@ -64,9 +64,9 @@ systemctl enable --now docker
 cd /opt/vpncdn
 mkdir -p xray/cert xray/data
 apt -y install certbot
-certbot certonly --standalone -d node1.example.com
-cp /etc/letsencrypt/live/node1.example.com/fullchain.pem xray/cert/fullchain.pem
-cp /etc/letsencrypt/live/node1.example.com/privkey.pem   xray/cert/privkey.pem
+certbot certonly --standalone -d node1.lytinef.ru
+cp /etc/letsencrypt/live/node1.lytinef.ru/fullchain.pem xray/cert/fullchain.pem
+cp /etc/letsencrypt/live/node1.lytinef.ru/privkey.pem   xray/cert/privkey.pem
 ```
 
 > Продление: сертификат origin выпущен `--standalone` (порт 80). Перед `certbot renew`
@@ -134,7 +134,7 @@ docker compose -p vpncdn -f deploy/docker-compose.prod.yml exec server node dist
 
 ```bash
 # API
-curl https://api.example.com/health
+curl https://api.lytinef.ru/health
 # агент Xray-узла (он во внутренней сети, не на хосте):
 docker compose -p vpncdn -f deploy/docker-compose.prod.yml exec server wget -qO- http://xray-node:8090/health
 # статус контейнеров
@@ -222,7 +222,7 @@ AGENT_SECRET=$AGENT_SECRET docker compose -p vpnnode up -d --build
 
 ## 9. Чек-лист приёмки
 
-- [ ] `https://api.example.com/health` отвечает `ok`
+- [ ] `https://api.lytinef.ru/health` отвечает `ok`
 - [ ] Админка открывается, вход работает, видны 3 тарифа
 - [ ] Агент узла отвечает (`exec server wget http://xray-node:8090/health`)
 - [ ] Вход в приложении через Telegram проходит (домен Login Widget = api.example.com)

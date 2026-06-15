@@ -18,6 +18,14 @@ object VpnBus {
         mapOf("pingMs" to 0, "downloadMbps" to 0.0, "uploadMbps" to 0.0)
         private set
 
+    /** Замер метрик активен только когда приложение на переднем плане (экономия батареи). */
+    @Volatile var statsActive: Boolean = true
+        private set
+
+    fun setStatsActive(active: Boolean) {
+        statsActive = active
+    }
+
     private var statusSink: EventChannel.EventSink? = null
     private var statsSink: EventChannel.EventSink? = null
 
