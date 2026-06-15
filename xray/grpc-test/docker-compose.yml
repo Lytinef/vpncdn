@@ -1,0 +1,11 @@
+# ВРЕМЕННЫЙ стенд для проверки gRPC через NGENIX. После теста удалить:
+#   docker compose -p grpctest -f xray/grpc-test/docker-compose.yml down
+services:
+  grpc-test:
+    image: teddysun/xray:latest
+    restart: "no"
+    volumes:
+      - ./config.json:/etc/xray/config.json:ro
+      - ../cert:/etc/xray/cert:ro       # переиспользуем сертификат node1.lytinef.ru
+    ports:
+      - "8444:8444"                     # origin gRPC для NGENIX
