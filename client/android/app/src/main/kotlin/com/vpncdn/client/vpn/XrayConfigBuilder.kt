@@ -61,7 +61,7 @@ object XrayConfigBuilder {
         val xhttpSettings = JSONObject()
             .put("path", wsPath)
             .put("host", wsHost)
-            .put("mode", "stream-up")
+            .put("mode", "auto")
         // TCP keepalive: пробы только при простое соединения, на throughput не влияют.
         val sockopt = JSONObject()
             .put("tcpKeepAliveIdle", 30)
