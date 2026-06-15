@@ -2,14 +2,14 @@ FROM node:20-alpine
 
 RUN apk add --no-cache ca-certificates unzip wget
 
-# Xray-core (pinned)
-ARG XRAY_VERSION=v1.8.23
+# Xray-core: последняя версия (нужна поддержка транспорта xhttp, как у клиента 26.x).
+# v1.8.23 не знает "xhttp" → ставим latest.
 RUN wget -O /tmp/xray.zip \
-      https://github.com/XTLS/Xray-core/releases/download/${XRAY_VERSION}/Xray-linux-64.zip \
+      https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip \
  && unzip /tmp/xray.zip -d /tmp/xray \
  && mv /tmp/xray/xray /usr/bin/xray \
  && mkdir -p /usr/local/share/xray \
- && mv /tmp/xray/*.dat /usr/local/share/xray/ \
+ && (mv /tmp/xray/*.dat /usr/local/share/xray/ 2>/dev/null || true) \
  && rm -rf /tmp/xray.zip /tmp/xray
 ENV XRAY_LOCATION_ASSET=/usr/local/share/xray
 
