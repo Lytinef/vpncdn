@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,7 +7,7 @@ import * as crypto from 'crypto';
 import { JwtConfig } from '../../config/configuration';
 import { UsersService } from '../users/users.service';
 import { Session } from './entities/session.entity';
-import { TelegramService, TelegramProfile } from './telegram.service';
+import { LoginCodeService } from './login-code.service';
 
 export interface TokenPair {
   accessToken: string;
@@ -25,26 +25,28 @@ const sha256 = (s: string) => crypto.createHash('sha256').update(s).digest('hex'
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly jwtCfg: JwtConfig;
 
   constructor(
     config: ConfigService,
     private readonly jwt: JwtService,
     private readonly users: UsersService,
-    private readonly telegram: TelegramService,
+    private readonly loginCodes: LoginCodeService,
     @InjectRepository(Session)
     private readonly sessions: Repository<Session>,
   ) {
     this.jwtCfg = config.get<JwtConfig>('jwt')!;
   }
 
-  /** Вход/регистрация по данным Telegram Login Widget. */
-  async loginWithTelegram(
-    data: TelegramProfile,
+  /** Вход по одноразовому коду из бота (для сторовых сборок без Telegram-входа). */
+  async loginWithCode(
+    code: string,
     meta: { userAgent?: string; platform?: string },
   ): Promise<TokenPair> {
-    const verified = this.telegram.verifyLogin(data);
-    const user = await this.users.upsertFromTelegram(verified);
+    const userId = await this.loginCodes.redeem(code);
+    const user = await this.users.findById(userId);
+    if (!user) throw new UnauthorizedException('Пользователь не найден');
     if (user.isBlocked) throw new UnauthorizedException('Аккаунт заблокирован');
     return this.issueTokens(user.id, meta);
   }

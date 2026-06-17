@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.vpncdn.client"
+        applicationId = "com.unway.app"
         minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

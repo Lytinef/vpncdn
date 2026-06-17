@@ -20,8 +20,17 @@ export class UsersService {
     return this.repo.findOne({ where: { telegramId } });
   }
 
-  /** Создаёт пользователя по данным Telegram или обновляет профиль существующего. */
-  async upsertFromTelegram(profile: TelegramProfile): Promise<User> {
+  /**
+   * Создаёт пользователя по данным Telegram или обновляет профиль существующего.
+   * Принимает только профильные поля — подходит и для Login Widget, и для бота
+   * (где нет auth_date/hash).
+   */
+  async upsertFromTelegram(
+    profile: Pick<
+      TelegramProfile,
+      'id' | 'first_name' | 'last_name' | 'username' | 'photo_url'
+    >,
+  ): Promise<User> {
     const telegramId = String(profile.id);
     let user = await this.findByTelegramId(telegramId);
     const patch: Partial<User> = {

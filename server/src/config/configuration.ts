@@ -105,7 +105,7 @@ export default (): Configuration => ({
     shopId: process.env.YOOKASSA_SHOP_ID ?? '',
     secretKey: process.env.YOOKASSA_SECRET_KEY ?? '',
     webhookPath: process.env.YOOKASSA_WEBHOOK_PATH ?? '/payments/yookassa/webhook',
-    returnUrl: process.env.YOOKASSA_RETURN_URL ?? 'vpncdn://payment/result',
+    returnUrl: process.env.YOOKASSA_RETURN_URL ?? 'unway://payment/result',
   },
   admin: {
     jwtSecret: process.env.ADMIN_JWT_SECRET ?? 'dev_admin',

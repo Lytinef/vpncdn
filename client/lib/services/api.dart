@@ -16,6 +16,12 @@ class Api {
   Future<void> logout(String refreshToken) =>
       _c.post('/auth/logout', body: {'refreshToken': refreshToken}, auth: false);
 
+  /// Вход по одноразовому коду из личного кабинета. Возвращает пару токенов.
+  Future<Map<String, dynamic>> loginWithCode(String code) async =>
+      Map<String, dynamic>.from(
+        await _c.post('/auth/code', body: {'code': code, 'platform': 'android'}, auth: false),
+      );
+
   // ── подписки ──
   Future<List<Plan>> plans() async {
     final list = await _c.get('/plans', auth: false) as List;
@@ -63,4 +69,9 @@ class Api {
 
   // ── список обхода ──
   Future<BypassList> bypass() async => BypassList.fromJson(await _c.get('/bypass'));
+
+  // ── версия приложения ──
+  Future<AppVersionInfo> checkVersion(int build) async => AppVersionInfo.fromJson(
+        await _c.get('/app/version?platform=android&build=$build', auth: false),
+      );
 }

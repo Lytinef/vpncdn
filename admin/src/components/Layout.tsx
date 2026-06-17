@@ -8,6 +8,7 @@ const links = [
   { to: '/payments', label: 'Платежи' },
   { to: '/nodes', label: 'Узлы' },
   { to: '/bypass', label: 'Обход VPN' },
+  { to: '/versions', label: 'Версии' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -15,7 +16,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand">VPN-CDN</div>
+        <div className="brand">Unway</div>
         <nav>
           {links.map((l) => (
             <NavLink

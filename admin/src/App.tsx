@@ -8,6 +8,7 @@ import UserDetail from './pages/UserDetail';
 import Payments from './pages/Payments';
 import Nodes from './pages/Nodes';
 import Bypass from './pages/Bypass';
+import Versions from './pages/Versions';
 
 export default function App() {
   const { admin, loading } = useAuth();
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/payments" element={<Payments />} />
         <Route path="/nodes" element={<Nodes />} />
         <Route path="/bypass" element={<Bypass />} />
+        <Route path="/versions" element={<Versions />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

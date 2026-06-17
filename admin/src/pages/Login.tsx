@@ -27,7 +27,7 @@ export default function Login() {
   return (
     <div className="center">
       <form className="card login" onSubmit={submit}>
-        <h1>Админка VPN-CDN</h1>
+        <h1>Админка Unway</h1>
         <label>Email</label>
         <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
         <label>Пароль</label>

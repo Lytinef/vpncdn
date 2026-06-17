@@ -70,13 +70,63 @@ export class SubscriptionsService {
     return sub ? sub.plan.deviceLimit : 0;
   }
 
+  /** Активный (не истёкший) пробный период пользователя, если есть. */
+  async getActiveTrial(userId: string): Promise<Subscription | null> {
+    const subs = await this.subs.find({
+      where: { userId, status: SubscriptionStatus.ACTIVE },
+    });
+    const now = Date.now();
+    return (
+      subs.find(
+        (s) =>
+          s.plan?.code === PlanCode.TRIAL &&
+          !!s.currentPeriodEnd &&
+          s.currentPeriodEnd.getTime() > now,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Выдаёт новому пользователю пробный период (план trial: 1 устройство, 3 дня).
+   * Идемпотентно: если у пользователя уже есть хоть одна подписка — ничего не
+   * делает (так существующие и уже покупавшие не получают повторный триал).
+   * Возвращает созданную пробную подписку либо null.
+   */
+  async grantTrialIfNew(userId: string): Promise<Subscription | null> {
+    const existing = await this.getLatest(userId);
+    if (existing) return null;
+    const plan = await this.getPlanByCode(PlanCode.TRIAL);
+    if (!plan) {
+      this.logger.warn(`Пробный тариф (trial) не найден — триал для ${userId} не выдан`);
+      return null;
+    }
+    const now = new Date();
+    const sub = this.subs.create({
+      userId,
+      planId: plan.id,
+      plan,
+      status: SubscriptionStatus.ACTIVE,
+      currentPeriodStart: now,
+      currentPeriodEnd: this.addDays(now, plan.durationDays),
+      autoRenew: false,
+      cancelAtPeriodEnd: false,
+      failedRenewals: 0,
+    });
+    this.logger.log(
+      `Пользователю ${userId} выдан пробный период до ${sub.currentPeriodEnd!.toISOString()}`,
+    );
+    return this.subs.save(sub);
+  }
+
   /**
    * Создаёт (или переиспользует) pending-подписку для покупки.
    * Активируется только после успешного первого платежа.
    */
   async createPending(userId: string, planCode: PlanCode): Promise<Subscription> {
     const active = await this.getActive(userId);
-    if (active) {
+    // Поверх пробного периода покупка разрешена (платный период стартует с конца
+    // триала). Поверх обычной активной подписки — только смена тарифа.
+    if (active && active.plan?.code !== PlanCode.TRIAL) {
       throw new BadRequestException(
         'У вас уже есть активная подписка. Используйте смену тарифа.',
       );
@@ -109,13 +159,23 @@ export class SubscriptionsService {
     const sub = await this.getById(subscriptionId);
     if (!sub) throw new NotFoundException('Подписка не найдена');
     const now = new Date();
+    // Если ещё идёт пробный период — платный период стартует с его конца
+    // (пробные дни не сгорают), иначе с момента оплаты. Следующее списание
+    // придётся на currentPeriodEnd = старт + длительность тарифа.
+    const trial = await this.getActiveTrial(sub.userId);
+    const start =
+      trial?.currentPeriodEnd && trial.currentPeriodEnd.getTime() > now.getTime()
+        ? trial.currentPeriodEnd
+        : now;
     sub.status = SubscriptionStatus.ACTIVE;
-    sub.currentPeriodStart = now;
-    sub.currentPeriodEnd = this.addDays(now, sub.plan.durationDays);
+    sub.currentPeriodStart = start;
+    sub.currentPeriodEnd = this.addDays(start, sub.plan.durationDays);
     sub.autoRenew = true;
     sub.cancelAtPeriodEnd = false;
     sub.failedRenewals = 0;
-    this.logger.log(`Подписка ${sub.id} активирована до ${sub.currentPeriodEnd.toISOString()}`);
+    this.logger.log(
+      `Подписка ${sub.id} активирована: ${start.toISOString()} → ${sub.currentPeriodEnd.toISOString()}`,
+    );
     return this.subs.save(sub);
   }
 
@@ -276,13 +336,24 @@ export class SubscriptionsService {
     });
   }
 
-  /** Подписки, у которых период закончился и продлевать не нужно (отменённые/просроченные). */
+  /**
+   * Подписки, у которых период закончился и продлевать не нужно:
+   *  - отменённые/просроченные (canceled/past_due);
+   *  - активные без автопродления (триал, ручная выдача админом).
+   */
   findToExpire(now = new Date()): Promise<Subscription[]> {
     return this.subs.find({
-      where: {
-        status: In([SubscriptionStatus.CANCELED, SubscriptionStatus.PAST_DUE]),
-        currentPeriodEnd: LessThanOrEqual(now),
-      },
+      where: [
+        {
+          status: In([SubscriptionStatus.CANCELED, SubscriptionStatus.PAST_DUE]),
+          currentPeriodEnd: LessThanOrEqual(now),
+        },
+        {
+          status: SubscriptionStatus.ACTIVE,
+          autoRenew: false,
+          currentPeriodEnd: LessThanOrEqual(now),
+        },
+      ],
     });
   }
 

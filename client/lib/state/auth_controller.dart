@@ -23,12 +23,18 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  /// Сохраняет полученные из WebView токены и подтягивает аккаунт.
+  /// Сохраняет токены и подтягивает аккаунт.
   Future<void> completeLogin(String access, String refresh) async {
     await _store.saveTokens(access, refresh);
     status = AuthStatus.signedIn;
     notifyListeners();
     await loadAccount();
+  }
+
+  /// Вход по одноразовому коду из личного кабинета. Бросает при неверном коде.
+  Future<void> loginWithCode(String code) async {
+    final r = await _api.loginWithCode(code);
+    await completeLogin(r['accessToken'], r['refreshToken']);
   }
 
   Future<void> loadAccount() async {

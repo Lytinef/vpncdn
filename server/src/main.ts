@@ -38,7 +38,7 @@ async function bootstrap() {
 
   if (appConfig.env !== 'production') {
     const swaggerConfig = new DocumentBuilder()
-      .setTitle('VPN-CDN API')
+      .setTitle('Unway API')
       .setDescription('API биллинга, подписок и управления VPN')
       .setVersion('0.1.0')
       .addBearerAuth()

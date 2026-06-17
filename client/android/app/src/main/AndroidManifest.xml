@@ -34,12 +34,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Deeplink возврата после входа/оплаты: vpncdn://... -->
+            <!-- Deeplink возврата после оплаты: unway://... -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="vpncdn" />
+                <data android:scheme="unway" />
             </intent-filter>
         </activity>
 

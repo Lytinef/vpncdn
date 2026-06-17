@@ -9,6 +9,8 @@ import {
 } from '../../modules/bypass/entities/bypass-entry.entity';
 
 const PLANS: Partial<Plan>[] = [
+  // Пробный период: бесплатно, 1 устройство, 3 дня. Скрыт из списка платных (isActive=false).
+  { code: PlanCode.TRIAL, name: 'Пробный', priceKopecks: 0, deviceLimit: 1, durationDays: 3, isActive: false, sortOrder: 0 },
   { code: PlanCode.START, name: 'Старт', priceKopecks: 14900, deviceLimit: 1, sortOrder: 1 },
   { code: PlanCode.STANDARD, name: 'Стандарт', priceKopecks: 24900, deviceLimit: 3, sortOrder: 2 },
   { code: PlanCode.FAMILY, name: 'Семейная', priceKopecks: 34900, deviceLimit: 6, sortOrder: 3 },
@@ -57,6 +59,10 @@ async function run() {
   console.log('Сиды: подключение к БД установлено');
 
   // ── Тарифы ──
+  // На случай, если миграция AddTrialPlan ещё не накатана в этом окружении —
+  // гарантируем наличие значения enum 'trial' до вставки тарифа (autocommit,
+  // отдельной транзакцией, поэтому значением можно сразу пользоваться).
+  await dataSource.query(`ALTER TYPE "plans_code_enum" ADD VALUE IF NOT EXISTS 'trial'`);
   const planRepo = dataSource.getRepository(Plan);
   for (const p of PLANS) {
     const existing = await planRepo.findOne({ where: { code: p.code } });

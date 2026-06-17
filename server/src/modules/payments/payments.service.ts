@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Repository } from 'typeorm';
+import { PAYMENT_SUCCEEDED, PaymentSucceededEvent } from '../../common/events';
 import { Payment, PaymentPurpose, PaymentStatus } from './entities/payment.entity';
 import { PlanCode } from '../subscriptions/entities/plan.entity';
 import { SubscriptionStatus } from '../subscriptions/entities/subscription.entity';
@@ -26,13 +28,14 @@ export class PaymentsService {
     private readonly yookassa: YookassaClient,
     private readonly methods: PaymentMethodsService,
     private readonly subscriptions: SubscriptionsService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
    * Старт покупки подписки: создаём pending-подписку и первичный платёж
    * с сохранением карты. Возвращаем confirmation_url для оплаты.
    */
-  async createCheckout(userId: string, planCode: PlanCode) {
+  async createCheckout(userId: string, planCode: PlanCode, returnUrl?: string) {
     const sub = await this.subscriptions.createPending(userId, planCode);
     const plan = sub.plan;
 
@@ -51,6 +54,7 @@ export class PaymentsService {
       amountKopecks: plan.priceKopecks,
       description: payment.description!,
       metadata: { paymentId: payment.id, userId, subscriptionId: sub.id },
+      returnUrl,
     });
 
     payment.yookassaPaymentId = yk.id;
@@ -174,6 +178,13 @@ export class PaymentsService {
       await this.subscriptions.renewAfterPayment(payment.subscriptionId);
       this.logger.log(`Платёж ${payment.id}: подписка продлена`);
     }
+
+    // Уведомляем подписчиков (Telegram-бот шлёт пользователю подтверждение).
+    this.events.emit(PAYMENT_SUCCEEDED, {
+      userId: payment.userId,
+      subscriptionId: payment.subscriptionId,
+      purpose: payment.purpose,
+    } satisfies PaymentSucceededEvent);
   }
 
   private async onPaymentFailed(payment: Payment): Promise<void> {

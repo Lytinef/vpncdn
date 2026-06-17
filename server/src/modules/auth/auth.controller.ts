@@ -1,23 +1,22 @@
 import { Body, Controller, Headers, Post, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthService, TokenPair } from './auth.service';
-import { TelegramLoginDto } from './dto/telegram-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { CodeLoginDto } from './dto/code-login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  /** Вход через Telegram Login Widget / Mini App. */
-  @Post('telegram')
+  /** Вход по одноразовому коду из бота (сборки без Telegram-входа). */
+  @Post('code')
   @HttpCode(HttpStatus.OK)
-  loginTelegram(
-    @Body() dto: TelegramLoginDto,
+  loginCode(
+    @Body() dto: CodeLoginDto,
     @Headers('user-agent') userAgent?: string,
   ): Promise<TokenPair> {
-    const { platform, ...profile } = dto;
-    return this.auth.loginWithTelegram(profile, { userAgent, platform });
+    return this.auth.loginWithCode(dto.code, { userAgent, platform: dto.platform });
   }
 
   /** Обновление пары токенов. */

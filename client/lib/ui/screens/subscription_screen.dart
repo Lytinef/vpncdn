@@ -1,67 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../config.dart';
 import '../../models/models.dart';
-import '../../services/api.dart';
 import '../../state/auth_controller.dart';
 
-class SubscriptionScreen extends StatefulWidget {
+/// Экран подписки — только данные о текущей подписке (без оплаты и смены тарифа;
+/// управление вынесено в личный кабинет).
+class SubscriptionScreen extends StatelessWidget {
   const SubscriptionScreen({super.key});
-
-  @override
-  State<SubscriptionScreen> createState() => _SubscriptionScreenState();
-}
-
-class _SubscriptionScreenState extends State<SubscriptionScreen> {
-  List<Plan> _plans = [];
-  bool _loading = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final api = context.read<Api>();
-    try {
-      _plans = await api.plans();
-    } catch (e) {
-      _error = e.toString();
-    }
-    if (mounted) setState(() => _loading = false);
-  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
-    final sub = auth.account?.subscription;
+    final account = auth.account;
+    final sub = account?.subscription;
     final hasSub = auth.hasActiveSubscription;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Подписка')),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                if (_error != null) Text(_error!, style: const TextStyle(color: Colors.red)),
-                if (hasSub) _current(context, sub!),
-                if (hasSub) const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 16),
-                  child: Text('Сменить тариф (со следующего периода)',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                ..._plans.map((p) => _planCard(context, p, sub, hasSub)),
-              ],
-            ),
+      body: RefreshIndicator(
+        onRefresh: auth.loadAccount,
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            if (hasSub && sub != null)
+              _SubCard(sub: sub, account: account!)
+            else
+              const _InactiveCard(),
+          ],
+        ),
+      ),
     );
   }
+}
 
-  Widget _current(BuildContext context, Subscription sub) {
+class _SubCard extends StatelessWidget {
+  final Subscription sub;
+  final AccountState account;
+  const _SubCard({required this.sub, required this.account});
+
+  bool get _isTrial => sub.plan.code == 'trial';
+
+  @override
+  Widget build(BuildContext context) {
     final canceled = sub.cancelAtPeriodEnd;
     return Card(
       child: Padding(
@@ -69,195 +50,87 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(sub.plan.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('${sub.plan.deviceLimit} устройств · ${sub.plan.priceRub} ₽/мес',
-                style: const TextStyle(color: Color(0xFF8B98A5))),
-            const SizedBox(height: 8),
-            Text(canceled
-                ? 'Отменена. Доступ до ${_fmt(sub.currentPeriodEnd)}'
-                : 'Активна. Продление ${_fmt(sub.currentPeriodEnd)}'),
-            if (sub.nextPlan != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text('Со следующего периода: ${sub.nextPlan!.name}',
-                    style: const TextStyle(color: Color(0xFF3B82F6))),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => _action(context, (api) => api.changePlan(sub.plan.code)),
-                  child: const Text('Отменить смену тарифа'),
-                ),
-              ),
-            ],
+            Text(
+              _isTrial ? 'Пробный период' : sub.plan.name,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 12),
-            if (canceled)
-              FilledButton(
-                onPressed: () => _action(context, (api) => api.resumeSubscription()),
-                child: const Text('Возобновить подписку'),
-              )
-            else
-              OutlinedButton(
-                onPressed: () => _confirmCancel(context),
-                child: const Text('Отменить подписку'),
-              ),
+            _row('Устройств', '${account.devicesUsed} из ${account.devicesLimit}'),
+            _row('Статус', _statusLabel(sub.status)),
+            _row(
+              canceled ? 'Доступ до' : 'Действует до',
+              _fmt(sub.currentPeriodEnd),
+            ),
+            if (!_isTrial)
+              _row('Автопродление', sub.autoRenew ? 'включено' : 'выключено'),
+            if (sub.nextPlan != null)
+              _row('Со следующего периода', sub.nextPlan!.name),
           ],
         ),
       ),
     );
   }
 
-  Widget _planCard(BuildContext context, Plan p, Subscription? sub, bool hasSub) {
-    final isCurrent = sub?.plan.code == p.code;
-    return Card(
-      child: ListTile(
-        title: Text('${p.name} · ${p.priceRub} ₽/мес'),
-        subtitle: Text('${p.deviceLimit} ${_devicesWord(p.deviceLimit)}'),
-        trailing: isCurrent
-            ? const Chip(label: Text('текущий'))
-            : FilledButton(
-                style: FilledButton.styleFrom(minimumSize: const Size(110, 40)),
-                onPressed: () => hasSub ? _changePlan(context, p) : _buy(context, p),
-                child: Text(hasSub ? 'Выбрать' : 'Купить'),
+  Widget _row(String label, String value) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(color: Color(0xFF8B98A5))),
+            Flexible(
+              child: Text(
+                value,
+                textAlign: TextAlign.right,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
-      ),
-    );
-  }
-
-  // ── действия ──
-
-  Future<void> _action(BuildContext context, Future<void> Function(Api) fn) async {
-    final api = context.read<Api>();
-    final auth = context.read<AuthController>();
-    try {
-      await fn(api);
-      await auth.loadAccount();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Готово')),
+            ),
+          ],
+        ),
       );
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
-      );
-    }
-  }
 
-  void _confirmCancel(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Отменить подписку?'),
-        content: const Text(
-            'Доступ сохранится до конца оплаченного периода. Деньги не возвращаются.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Назад')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _action(context, (api) => api.cancelSubscription());
-            },
-            child: const Text('Отменить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _changePlan(BuildContext context, Plan p) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text('Перейти на «${p.name}»?'),
-        content: const Text('Новый тариф вступит в силу со следующего периода.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Назад')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _action(context, (api) => api.changePlan(p.code));
-            },
-            child: const Text('Сменить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _buy(BuildContext context, Plan p) async {
-    final api = context.read<Api>();
-    final auth = context.read<AuthController>();
-    try {
-      final res = await api.checkout(p.code);
-      final url = res['confirmationUrl'] as String?;
-      final paymentId = res['paymentId'] as String;
-      if (url == null) throw Exception('Нет ссылки оплаты');
-      if (!mounted) return;
-      final ok = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => _PaymentWebView(url: url)),
-      );
-      if (ok == true) {
-        // Подтверждаем статус и обновляем аккаунт.
-        await api.syncPayment(paymentId);
-        await auth.loadAccount();
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Оплата обработана')),
-        );
-      }
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка оплаты: $e')),
-      );
+  static String _statusLabel(String status) {
+    switch (status) {
+      case 'active':
+        return 'активна';
+      case 'canceled':
+        return 'отменена (до конца периода)';
+      case 'past_due':
+        return 'ожидает оплаты';
+      case 'pending':
+        return 'ожидает оплаты';
+      case 'expired':
+        return 'истекла';
+      default:
+        return status;
     }
   }
 
   static String _fmt(DateTime? d) => d == null
       ? '—'
       : '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
-
-  static String _devicesWord(int n) {
-    if (n == 1) return 'устройство';
-    if (n >= 2 && n <= 4) return 'устройства';
-    return 'устройств';
-  }
 }
 
-/// WebView оплаты YooKassa: ловим возврат на deeplink return_url.
-class _PaymentWebView extends StatefulWidget {
-  final String url;
-  const _PaymentWebView({required this.url});
-
-  @override
-  State<_PaymentWebView> createState() => _PaymentWebViewState();
-}
-
-class _PaymentWebViewState extends State<_PaymentWebView> {
-  late final WebViewController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (req) {
-            if (req.url.startsWith('${AppConfig.deepLinkScheme}://payment')) {
-              Navigator.of(context).pop(true);
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.url));
-  }
+class _InactiveCard extends StatelessWidget {
+  const _InactiveCard();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Оплата')),
-      body: WebViewWidget(controller: _controller),
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: Color(0xFFE5484D)),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Подписка неактивна',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

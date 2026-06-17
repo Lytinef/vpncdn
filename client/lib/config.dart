@@ -9,11 +9,8 @@ class AppConfig {
 
   static String get apiUrl => '$apiBaseUrl/api';
 
-  /// Страница входа через Telegram (открывается в WebView).
-  static String get telegramLoginUrl => '$apiUrl/auth/tg-login';
-
-  /// Deeplink-схема приложения (возврат после входа/оплаты).
-  static const String deepLinkScheme = 'vpncdn';
+  /// Deeplink-схема приложения (возврат после оплаты).
+  static const String deepLinkScheme = 'unway';
 
   /// Интервал обновления метрик на главном экране, мс.
   static const int statsIntervalMs = 1500;

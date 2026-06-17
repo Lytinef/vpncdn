@@ -1,12 +1,43 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
-import '../../config.dart';
 import '../../state/auth_controller.dart';
 
-class LoginScreen extends StatelessWidget {
+/// Вход по одноразовому коду доступа (выдаётся в личном кабинете).
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _codeCtrl = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _codeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final code = _codeCtrl.text.trim();
+    if (code.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await context.read<AuthController>().loginWithCode(code);
+      // Успех — AuthController сам переключит экран на главный.
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,78 +51,56 @@ class LoginScreen extends StatelessWidget {
               const Spacer(),
               const Icon(Icons.vpn_lock, size: 72, color: Color(0xFF3B82F6)),
               const SizedBox(height: 24),
-              Text('Unway',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium),
+              Text(
+                'Unway',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.headlineMedium,
+              ),
               const SizedBox(height: 8),
               const Text(
-                'Быстрый и устойчивый VPN через CDN.\nВход через Telegram.',
+                'Введите код доступа из вашего личного кабинета.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Color(0xFF8B98A5)),
               ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _codeCtrl,
+                textAlign: TextAlign.center,
+                textCapitalization: TextCapitalization.characters,
+                autocorrect: false,
+                enabled: !_busy,
+                style: const TextStyle(fontSize: 22, letterSpacing: 4),
+                decoration: const InputDecoration(
+                  hintText: 'КОД',
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _submit(),
+              ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFFE5484D)),
+                  ),
+                ),
               const Spacer(),
-              FilledButton.icon(
-                icon: const Icon(Icons.telegram),
-                label: const Text('Войти через Telegram'),
-                onPressed: () => _openLogin(context),
+              FilledButton(
+                onPressed: _busy ? null : _submit,
+                child: _busy
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Войти'),
               ),
               const SizedBox(height: 16),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  void _openLogin(BuildContext context) {
-    final auth = context.read<AuthController>();
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => _TelegramWebView(auth: auth)),
-    );
-  }
-}
-
-class _TelegramWebView extends StatefulWidget {
-  final AuthController auth;
-  const _TelegramWebView({required this.auth});
-
-  @override
-  State<_TelegramWebView> createState() => _TelegramWebViewState();
-}
-
-class _TelegramWebViewState extends State<_TelegramWebView> {
-  late final WebViewController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onNavigationRequest: (req) {
-            if (req.url.startsWith('${AppConfig.deepLinkScheme}://auth')) {
-              final uri = Uri.parse(req.url);
-              final access = uri.queryParameters['access'];
-              final refresh = uri.queryParameters['refresh'];
-              if (access != null && refresh != null) {
-                widget.auth.completeLogin(access, refresh);
-                if (mounted) Navigator.of(context).pop();
-              }
-              return NavigationDecision.prevent;
-            }
-            return NavigationDecision.navigate;
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(AppConfig.telegramLoginUrl));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Вход через Telegram')),
-      body: WebViewWidget(controller: _controller),
     );
   }
 }

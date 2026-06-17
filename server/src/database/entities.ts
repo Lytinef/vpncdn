@@ -8,6 +8,8 @@ import { Device } from '../modules/devices/entities/device.entity';
 import { Node } from '../modules/nodes/entities/node.entity';
 import { BypassEntry } from '../modules/bypass/entities/bypass-entry.entity';
 import { AdminUser } from '../modules/admin/entities/admin-user.entity';
+import { AppVersion } from '../modules/app-version/entities/app-version.entity';
+import { LoginCode } from '../modules/auth/entities/login-code.entity';
 
 /** Единый список сущностей для TypeORM (forRoot и CLI data-source). */
 export const entities = [
@@ -21,4 +23,6 @@ export const entities = [
   Node,
   BypassEntry,
   AdminUser,
+  AppVersion,
+  LoginCode,
 ];

@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import 'theme.dart';
 import 'state/auth_controller.dart';
 import 'state/vpn_controller.dart';
+import 'state/update_controller.dart';
 import 'ui/screens/login_screen.dart';
 import 'ui/screens/home_screen.dart';
+import 'ui/screens/force_update_screen.dart';
 
 class VpnApp extends StatefulWidget {
   const VpnApp({super.key});
@@ -40,16 +42,21 @@ class _VpnAppState extends State<VpnApp> with WidgetsBindingObserver {
       title: 'Unway',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: Consumer<AuthController>(
-        builder: (_, auth, __) {
-          switch (auth.status) {
-            case AuthStatus.unknown:
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
-            case AuthStatus.signedOut:
-              return const LoginScreen();
-            case AuthStatus.signedIn:
-              return const HomeScreen();
-          }
+      home: Consumer<UpdateController>(
+        builder: (_, upd, __) {
+          if (upd.mustUpdate) return ForceUpdateScreen(info: upd.info!);
+          return Consumer<AuthController>(
+            builder: (_, auth, __) {
+              switch (auth.status) {
+                case AuthStatus.unknown:
+                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
+                case AuthStatus.signedOut:
+                  return const LoginScreen();
+                case AuthStatus.signedIn:
+                  return const HomeScreen();
+              }
+            },
+          );
         },
       ),
     );

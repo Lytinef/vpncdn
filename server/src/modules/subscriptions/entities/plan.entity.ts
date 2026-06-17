@@ -8,6 +8,8 @@ import {
 } from 'typeorm';
 
 export enum PlanCode {
+  /** Пробный период: 1 устройство, 3 дня, бесплатно. Скрыт из списка платных. */
+  TRIAL = 'trial',
   START = 'start',
   STANDARD = 'standard',
   FAMILY = 'family',

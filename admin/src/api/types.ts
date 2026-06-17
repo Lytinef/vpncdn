@@ -96,3 +96,14 @@ export interface BypassEntryView {
   category: string | null;
   isActive: boolean;
 }
+
+export interface AppVersionView {
+  id: string;
+  platform: 'android' | 'ios' | 'windows';
+  latestVersion: string;
+  latestBuild: number;
+  minBuild: number;
+  updateUrl: string | null;
+  notes: string | null;
+  updatedAt: string;
+}

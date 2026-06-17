@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../models/models.dart';
 import '../../state/auth_controller.dart';
 import '../../state/vpn_controller.dart';
+import '../../state/update_controller.dart';
 import '../../services/vpn_engine.dart';
 import 'subscription_screen.dart';
 import 'split_tunneling_screen.dart';
@@ -17,6 +20,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
     final vpn = context.watch<VpnController>();
+    final upd = context.watch<UpdateController>();
     final sub = auth.account?.subscription;
     final hasSub = auth.hasActiveSubscription;
 
@@ -35,6 +39,10 @@ class HomeScreen extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            if (upd.bannerVisible) ...[
+              _UpdateBanner(info: upd.info!, onDismiss: upd.dismiss),
+              const SizedBox(height: 16),
+            ],
             _ConnectionCard(vpn: vpn, hasSub: hasSub, context: context),
             const SizedBox(height: 16),
             _MetricsRow(stats: vpn.stats, connected: vpn.isConnected),
@@ -154,7 +162,7 @@ class _ConnectionCard extends StatelessWidget {
       case VpnStage.error:
         return 'Ошибка';
       case VpnStage.disconnected:
-        return hasSub ? 'Нажмите для подключения' : 'Оформите подписку';
+        return hasSub ? 'Нажмите для подключения' : 'Подписка неактивна';
     }
   }
 }
@@ -236,6 +244,61 @@ class _MenuTile extends StatelessWidget {
         subtitle: Text(subtitle),
         trailing: const Icon(Icons.chevron_right),
         onTap: onTap,
+      ),
+    );
+  }
+}
+
+class _UpdateBanner extends StatelessWidget {
+  final AppVersionInfo info;
+  final VoidCallback onDismiss;
+  const _UpdateBanner({required this.info, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = (info.updateUrl ?? '').isNotEmpty;
+    final notes = info.notes ?? '';
+    return Card(
+      color: const Color(0xFF11233F),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.system_update, color: Color(0xFF3B82F6)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Доступна новая версия${info.latestVersion != null ? ' ${info.latestVersion}' : ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  if (notes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        notes,
+                        style: const TextStyle(color: Color(0xFF8B98A5), fontSize: 12),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (hasUrl)
+              TextButton(
+                onPressed: () => launchUrl(
+                  Uri.parse(info.updateUrl!),
+                  mode: LaunchMode.externalApplication,
+                ),
+                child: const Text('Обновить'),
+              ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: onDismiss,
+            ),
+          ],
+        ),
       ),
     );
   }

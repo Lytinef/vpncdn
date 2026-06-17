@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 import { ScheduleModule } from '@nestjs/schedule';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import configuration, {
   DatabaseConfig,
   RedisConfig,
@@ -19,6 +20,8 @@ import { BypassModule } from './modules/bypass/bypass.module';
 import { AccountModule } from './modules/account/account.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { BotModule } from './modules/bot/bot.module';
+import { AppVersionModule } from './modules/app-version/app-version.module';
 
 @Module({
   imports: [
@@ -54,6 +57,7 @@ import { StatsModule } from './modules/stats/stats.module';
     }),
 
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot(),
 
     AuthModule,
     UsersModule,
@@ -65,6 +69,8 @@ import { StatsModule } from './modules/stats/stats.module';
     AccountModule,
     AdminModule,
     StatsModule,
+    BotModule,
+    AppVersionModule,
   ],
   controllers: [AppController],
 })

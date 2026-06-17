@@ -11,6 +11,7 @@ import 'services/settings_store.dart';
 import 'services/vpn_engine.dart';
 import 'state/auth_controller.dart';
 import 'state/vpn_controller.dart';
+import 'state/update_controller.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,12 +25,15 @@ Future<void> main() async {
 
   final auth = AuthController(api, store);
   final vpn = VpnController(api, VpnEngine(), settings);
+  final update = UpdateController(api);
 
   // Принудительный разлогин при окончательной потере сессии.
   client.onUnauthorized = auth.forceSignOut;
 
   await auth.bootstrap();
   await vpn.init();
+  // Проверка версии в фоне — не блокирует запуск.
+  update.check();
 
   // Слушаем deeplink vpncdn://auth?access=...&refresh=... из WebView входа.
   final appLinks = AppLinks();
@@ -48,6 +52,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider.value(value: auth),
         ChangeNotifierProvider.value(value: vpn),
+        ChangeNotifierProvider.value(value: update),
         Provider.value(value: api),
         Provider.value(value: settings),
       ],

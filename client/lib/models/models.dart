@@ -181,6 +181,34 @@ class BypassItem {
       BypassItem(value: j['value'], title: j['title'], category: j['category']);
 }
 
+/// Информация об актуальной версии клиента (с backend /app/version).
+class AppVersionInfo {
+  final String? latestVersion;
+  final int latestBuild;
+  final bool updateAvailable;
+  final bool forceUpdate;
+  final String? updateUrl;
+  final String? notes;
+
+  AppVersionInfo({
+    required this.latestVersion,
+    required this.latestBuild,
+    required this.updateAvailable,
+    required this.forceUpdate,
+    required this.updateUrl,
+    required this.notes,
+  });
+
+  factory AppVersionInfo.fromJson(Map<String, dynamic> j) => AppVersionInfo(
+        latestVersion: j['latestVersion'],
+        latestBuild: j['latestBuild'] ?? 0,
+        updateAvailable: j['updateAvailable'] ?? false,
+        forceUpdate: j['forceUpdate'] ?? false,
+        updateUrl: j['updateUrl'],
+        notes: j['notes'],
+      );
+}
+
 class InstalledApp {
   final String packageName;
   final String name;

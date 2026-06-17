@@ -105,7 +105,7 @@ class VpnConnectionService : VpnService() {
 
     private fun buildTun(cfg: JSONObject, mtu: Int, dns: String): ParcelFileDescriptor? {
         val builder = Builder()
-            .setSession("VPN-CDN")
+            .setSession("Unway")
             .setMtu(mtu)
             .addAddress("10.10.0.2", 32)
             .addDnsServer(dns)
