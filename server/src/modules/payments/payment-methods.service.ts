@@ -30,8 +30,8 @@ export class PaymentMethodsService {
     });
     if (existing) return existing;
 
-    // Новый способ делаем дефолтным, старые — снимаем с дефолта.
-    await this.repo.update({ userId, isDefault: true }, { isDefault: false });
+    // Новая карта заменяет прежние: старые способы деактивируем.
+    await this.repo.update({ userId, isActive: true }, { isActive: false, isDefault: false });
     const method = this.repo.create({
       userId,
       yookassaPaymentMethodId: ykMethod.id,

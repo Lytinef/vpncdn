@@ -27,6 +27,8 @@ export enum PaymentPurpose {
   RENEWAL = 'renewal',
   /** Смена тарифа (доплата/новый период). */
   PLAN_CHANGE = 'plan_change',
+  /** Привязка карты: символический платёж с автоматическим возвратом. */
+  BIND_CARD = 'bind_card',
 }
 
 @Entity('payments')

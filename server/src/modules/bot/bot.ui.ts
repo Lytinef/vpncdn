@@ -62,9 +62,13 @@ export const mainMenuKeyboard = (): InlineKeyboard =>
     .row()
     .text('🔐 Войти в приложение', 'menu:login')
     .row()
+    .text('📲 Получить конфиг', 'menu:config')
+    .row()
     .text('💳 Тарифы и оплата', 'menu:plans')
     .row()
     .text('🔄 Сменить тариф', 'menu:change')
+    .row()
+    .text('💳 Привязать карту', 'menu:bindcard')
     .row()
     .text('📱 Мои устройства', 'menu:devices')
     .row()
@@ -113,7 +117,7 @@ export function devicesKeyboard(devices: Device[]): InlineKeyboard {
 
 // ── Тексты ─────────────────────────────────────────────────
 
-export function statusText(sub: Subscription | null): string {
+export function statusText(sub: Subscription | null, cardLast4?: string | null): string {
   if (!sub) {
     return (
       '📊 <b>Подписка</b>\n\n' +
@@ -128,6 +132,9 @@ export function statusText(sub: Subscription | null): string {
   lines.push(`Действует до: <b>${fmtDate(sub.currentPeriodEnd)}</b>`);
   if (!trial) {
     lines.push(`Автопродление: <b>${sub.autoRenew ? 'включено' : 'выключено'}</b>`);
+  }
+  if (cardLast4 !== undefined) {
+    lines.push(`Карта: <b>${cardLast4 ? '•••• ' + cardLast4 : 'не привязана'}</b>`);
   }
   if (sub.nextPlan) {
     lines.push(`Со следующего периода: <b>${sub.nextPlan.name}</b>`);

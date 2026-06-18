@@ -47,11 +47,12 @@ export class XrayService {
 
   /** Собирает конфигурацию подключения для клиента. */
   buildConnection(node: Node, device: Device): VlessConnection {
+    // Транспорт — XHTTP (как на origin за NGENIX); ws-ссылка не подключится.
     const uri =
       `vless://${device.xrayUuid}@${node.cdnDomain}:${node.port}` +
       `?encryption=none&security=tls&sni=${encodeURIComponent(node.sni)}` +
-      `&type=ws&host=${encodeURIComponent(node.cdnDomain)}` +
-      `&path=${encodeURIComponent(node.wsPath)}` +
+      `&type=xhttp&host=${encodeURIComponent(node.cdnDomain)}` +
+      `&path=${encodeURIComponent(node.wsPath)}&mode=auto` +
       `#${encodeURIComponent(node.name)}`;
 
     return {

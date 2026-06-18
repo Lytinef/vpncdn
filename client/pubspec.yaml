@@ -1,7 +1,7 @@
 name: vpncdn_client
 description: VPN-over-NGENIX-CDN клиент (Android, далее Windows/iOS)
 publish_to: "none"
-version: 0.1.0+1
+version: 0.9.0+1
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -23,6 +23,12 @@ dependencies:
 
 dev_dependencies:
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/images/icon.png"

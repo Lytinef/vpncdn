@@ -12,7 +12,10 @@ import { PAYMENT_SUCCEEDED, PaymentSucceededEvent } from '../../common/events';
 import { UsersService } from '../users/users.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { PaymentsService } from '../payments/payments.service';
+import { PaymentMethodsService } from '../payments/payment-methods.service';
+import { PaymentPurpose } from '../payments/entities/payment.entity';
 import { DevicesService } from '../devices/devices.service';
+import { DevicePlatform } from '../devices/entities/device.entity';
 import { LoginCodeService } from '../auth/login-code.service';
 import { PlanCode } from '../subscriptions/entities/plan.entity';
 import * as ui from './bot.ui';
@@ -36,6 +39,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     private readonly users: UsersService,
     private readonly subs: SubscriptionsService,
     private readonly payments: PaymentsService,
+    private readonly paymentMethods: PaymentMethodsService,
     private readonly devices: DevicesService,
     private readonly loginCodes: LoginCodeService,
   ) {
@@ -80,6 +84,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     bot.callbackQuery('menu:main', (ctx) => this.guard(ctx, () => this.showMenu(ctx)));
     bot.callbackQuery('menu:status', (ctx) => this.guard(ctx, () => this.showStatus(ctx)));
     bot.callbackQuery('menu:login', (ctx) => this.guard(ctx, () => this.showLoginCode(ctx)));
+    bot.callbackQuery('menu:config', (ctx) => this.guard(ctx, () => this.showConfig(ctx)));
+    bot.callbackQuery('menu:bindcard', (ctx) => this.guard(ctx, () => this.showBindCard(ctx)));
     bot.callbackQuery('menu:plans', (ctx) => this.guard(ctx, () => this.showPlans(ctx)));
     bot.callbackQuery('menu:change', (ctx) => this.guard(ctx, () => this.showChange(ctx)));
     bot.callbackQuery('menu:devices', (ctx) => this.guard(ctx, () => this.showDevices(ctx)));
@@ -124,7 +130,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
   private async showStatus(ctx: Context): Promise<void> {
     const userId = await this.getUserId(ctx);
     const sub = await this.subs.getActive(userId);
-    await this.render(ctx, ui.statusText(sub), ui.statusKeyboard(sub));
+    const card = await this.paymentMethods.getDefault(userId);
+    await this.render(ctx, ui.statusText(sub, card?.cardLast4 ?? null), ui.statusKeyboard(sub));
   }
 
   private async showPlans(ctx: Context): Promise<void> {
@@ -235,6 +242,46 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     await this.render(ctx, ui.SUPPORT_TEXT, ui.backKeyboard());
   }
 
+  private async showBindCard(ctx: Context): Promise<void> {
+    const userId = await this.getUserId(ctx);
+    const returnUrl = this.cfg.botUsername
+      ? `https://t.me/${this.cfg.botUsername}`
+      : undefined;
+    const checkout = await this.payments.createCardBinding(userId, returnUrl);
+    if (!checkout.confirmationUrl) {
+      throw new Error('Не удалось создать ссылку, попробуйте позже');
+    }
+    const kb = new InlineKeyboard()
+      .url(`💳 Привязать карту (${checkout.amountRub} ₽)`, checkout.confirmationUrl)
+      .row()
+      .text('⬅️ В меню', 'menu:main');
+    await this.render(
+      ctx,
+      '💳 <b>Привязка карты</b>\n\n' +
+        `Спишем <b>${checkout.amountRub} ₽</b> для привязки и сразу вернём. ` +
+        'Новая карта заменит прежнюю — с неё будут идти автосписания.',
+      kb,
+    );
+  }
+
+  private async showConfig(ctx: Context): Promise<void> {
+    const userId = await this.getUserId(ctx);
+    // Регистрируем конфиг как «устройство» — учитывается в лимите тарифа.
+    const device = await this.devices.register(userId, {
+      name: 'Внешний конфиг',
+      platform: DevicePlatform.IOS,
+    });
+    const conn = await this.devices.getConnection(userId, device.id);
+    await this.render(
+      ctx,
+      '📲 <b>Конфиг для стороннего приложения</b>\n\n' +
+        'Импортируйте ссылку в клиент с поддержкой VLESS + XHTTP (Happ, v2RayTun, v2rayNG и т.п.):\n\n' +
+        `<code>${ui.escapeHtml(conn.uri)}</code>\n\n` +
+        'Конфиг учитывается в лимите устройств тарифа — удалить можно в «📱 Мои устройства».',
+      ui.backKeyboard(),
+    );
+  }
+
   private async showLoginCode(ctx: Context): Promise<void> {
     const userId = await this.getUserId(ctx);
     const { code, expiresAt } = await this.loginCodes.issue(userId);
@@ -256,10 +303,19 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     try {
       const user = await this.users.findById(ev.userId);
       if (!user) return;
+      if (ev.purpose === PaymentPurpose.BIND_CARD) {
+        await this.bot.api.sendMessage(
+          user.telegramId,
+          '✅ <b>Карта привязана.</b> Списанная сумма вернётся; автосписания пойдут с новой карты.',
+          { parse_mode: 'HTML', reply_markup: ui.mainMenuKeyboard() },
+        );
+        return;
+      }
       const sub = await this.subs.getActive(ev.userId);
+      const card = await this.paymentMethods.getDefault(ev.userId);
       await this.bot.api.sendMessage(
         user.telegramId,
-        '✅ <b>Оплата получена!</b>\n\n' + ui.statusText(sub),
+        '✅ <b>Оплата получена!</b>\n\n' + ui.statusText(sub, card?.cardLast4 ?? null),
         { parse_mode: 'HTML', reply_markup: ui.statusKeyboard(sub) },
       );
     } catch (e) {

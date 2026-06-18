@@ -96,6 +96,20 @@ export class YookassaClient {
     }
   }
 
+  /** Полный/частичный возврат платежа (для бесплатной привязки карты). */
+  async refund(paymentId: string, amountKopecks: number): Promise<void> {
+    try {
+      await this.http.post(
+        '/refunds',
+        { payment_id: paymentId, amount: toYookassaAmount(amountKopecks) },
+        { headers: { 'Idempotence-Key': uuidv4() } },
+      );
+    } catch (e) {
+      this.logger.error(`Ошибка возврата по платежу ${paymentId}: ${this.errMsg(e)}`);
+      throw new ServiceUnavailableException('Не удалось вернуть платёж');
+    }
+  }
+
   private async request(body: Record<string, unknown>): Promise<YkPayment> {
     try {
       const { data } = await this.http.post<YkPayment>('/payments', body, {

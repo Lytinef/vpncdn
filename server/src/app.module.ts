@@ -57,7 +57,9 @@ import { AppVersionModule } from './modules/app-version/app-version.module';
     }),
 
     ScheduleModule.forRoot(),
-    EventEmitterModule.forRoot(),
+    EventEmitterModule.forRoot({
+        global: true,
+    }),
 
     AuthModule,
     UsersModule,

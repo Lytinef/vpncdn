@@ -18,6 +18,9 @@ const STATUS_MAP: Record<YkPayment['status'], PaymentStatus> = {
   canceled: PaymentStatus.CANCELED,
 };
 
+/** Символическая сумма для привязки карты — возвращается сразу после успеха. */
+const BIND_CARD_AMOUNT_KOPECKS = 100; // 1 ₽
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -67,6 +70,41 @@ export class PaymentsService {
       paymentId: payment.id,
       confirmationUrl: payment.confirmationUrl,
       amountRub: kopecksToRubles(plan.priceKopecks),
+    };
+  }
+
+  /**
+   * Привязка карты: символический платёж (1 ₽) с сохранением способа оплаты и
+   * автоматическим возвратом после успеха. Новая карта заменяет прежнюю.
+   */
+  async createCardBinding(userId: string, returnUrl?: string) {
+    const payment = this.payments.create({
+      userId,
+      amountKopecks: BIND_CARD_AMOUNT_KOPECKS,
+      status: PaymentStatus.PENDING,
+      purpose: PaymentPurpose.BIND_CARD,
+      isRecurring: false,
+      description: 'Привязка карты',
+    });
+    await this.payments.save(payment);
+
+    const yk = await this.yookassa.createInitialPayment({
+      amountKopecks: payment.amountKopecks,
+      description: payment.description!,
+      metadata: { paymentId: payment.id, userId },
+      returnUrl,
+    });
+
+    payment.yookassaPaymentId = yk.id;
+    payment.status = STATUS_MAP[yk.status];
+    payment.confirmationUrl = yk.confirmation?.confirmation_url ?? null;
+    payment.raw = yk as unknown as Record<string, unknown>;
+    await this.payments.save(payment);
+
+    return {
+      paymentId: payment.id,
+      confirmationUrl: payment.confirmationUrl,
+      amountRub: kopecksToRubles(payment.amountKopecks),
     };
   }
 
@@ -170,13 +208,24 @@ export class PaymentsService {
       }
     }
 
-    if (!payment.subscriptionId) return;
-    if (payment.purpose === PaymentPurpose.INITIAL) {
-      await this.subscriptions.activateInitial(payment.subscriptionId);
-      this.logger.log(`Платёж ${payment.id}: подписка активирована`);
-    } else if (payment.purpose === PaymentPurpose.RENEWAL) {
-      await this.subscriptions.renewAfterPayment(payment.subscriptionId);
-      this.logger.log(`Платёж ${payment.id}: подписка продлена`);
+    if (payment.purpose === PaymentPurpose.BIND_CARD) {
+      // Привязка карты бесплатна — возвращаем символическую сумму (best-effort).
+      if (payment.yookassaPaymentId) {
+        try {
+          await this.yookassa.refund(payment.yookassaPaymentId, payment.amountKopecks);
+        } catch (e) {
+          this.logger.warn(`Возврат за привязку карты не прошёл: ${String(e)}`);
+        }
+      }
+      this.logger.log(`Платёж ${payment.id}: карта привязана`);
+    } else if (payment.subscriptionId) {
+      if (payment.purpose === PaymentPurpose.INITIAL) {
+        await this.subscriptions.activateInitial(payment.subscriptionId);
+        this.logger.log(`Платёж ${payment.id}: подписка активирована`);
+      } else if (payment.purpose === PaymentPurpose.RENEWAL) {
+        await this.subscriptions.renewAfterPayment(payment.subscriptionId);
+        this.logger.log(`Платёж ${payment.id}: подписка продлена`);
+      }
     }
 
     // Уведомляем подписчиков (Telegram-бот шлёт пользователю подтверждение).
