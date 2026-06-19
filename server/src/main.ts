@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { json, urlencoded } from 'express';
@@ -18,7 +18,14 @@ async function bootstrap() {
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
 
-  app.setGlobalPrefix('api', { exclude: ['health'] });
+  // Вебхук YooKassa — публичный и вне префикса /api: путь должен совпадать с
+  // тем, что задан в ЛК YooKassa (/payments/yookassa/webhook).
+  app.setGlobalPrefix('api', {
+    exclude: [
+      'health',
+      { path: 'payments/yookassa/webhook', method: RequestMethod.POST },
+    ],
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
