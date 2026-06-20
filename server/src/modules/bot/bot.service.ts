@@ -84,7 +84,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     bot.callbackQuery('menu:main', (ctx) => this.guard(ctx, () => this.showMenu(ctx)));
     bot.callbackQuery('menu:status', (ctx) => this.guard(ctx, () => this.showStatus(ctx)));
     bot.callbackQuery('menu:login', (ctx) => this.guard(ctx, () => this.showLoginCode(ctx)));
-    bot.callbackQuery('menu:config', (ctx) => this.guard(ctx, () => this.showConfig(ctx)));
+    bot.callbackQuery('menu:config', (ctx) => this.guard(ctx, () => this.showConfigConfirm(ctx)));
+    bot.callbackQuery('config:add', (ctx) => this.guard(ctx, () => this.addConfig(ctx)));
     bot.callbackQuery('menu:bindcard', (ctx) => this.guard(ctx, () => this.showBindCard(ctx)));
     bot.callbackQuery('menu:plans', (ctx) => this.guard(ctx, () => this.showPlans(ctx)));
     bot.callbackQuery('menu:change', (ctx) => this.guard(ctx, () => this.showChange(ctx)));
@@ -149,7 +150,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const plans = await this.subs.listActivePlans();
     const onTrial = !!sub && sub.plan?.code === PlanCode.TRIAL;
     const head =
-      '💳 <b>Выберите тариф</b>' +
+      '💳 <b>Выберите тариф</b>\n\n' +
+      'Цена — за 1 месяц, далее автопродление каждый месяц. Число устройств указано в названии тарифа.' +
       (onTrial ? '\n\nПлатный период начнётся после пробного — пробные дни не сгорают.' : '');
     await this.render(ctx, head, ui.plansKeyboard(plans, 'buy'));
   }
@@ -192,7 +194,8 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const plans = await this.subs.listActivePlans();
     const text =
       '🔄 <b>Смена тарифа</b>\n\n' +
-      `Текущий: <b>${sub.plan.name}</b>. Новый тариф вступит в силу со следующего периода.\n` +
+      `Текущий: <b>${sub.plan.name}</b> · ${sub.plan.deviceLimit} устр.\n` +
+      'Новый тариф вступит в силу со следующего периода; оплата — за месяц. ' +
       'Выберите текущий тариф, чтобы отменить запланированную смену.' +
       (sub.nextPlan ? `\n\nЗапланировано: <b>${sub.nextPlan.name}</b>.` : '');
     await this.render(ctx, text, ui.plansKeyboard(plans, 'change', sub.plan.code));
@@ -264,9 +267,42 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async showConfig(ctx: Context): Promise<void> {
+  private async showConfigConfirm(ctx: Context): Promise<void> {
     const userId = await this.getUserId(ctx);
-    // Регистрируем конфиг как «устройство» — учитывается в лимите тарифа.
+    const limit = await this.subs.getEffectiveDeviceLimit(userId);
+    if (limit <= 0) {
+      await this.render(
+        ctx,
+        '📲 <b>Конфиг</b>\n\nНет активной подписки — оформите тариф, чтобы получить конфиг.',
+        ui.backKeyboard(),
+      );
+      return;
+    }
+    const used = await this.devices.countActive(userId);
+    if (used >= limit) {
+      await this.render(
+        ctx,
+        `📲 <b>Конфиг</b>\n\nДостигнут лимит устройств (${used} из ${limit}). ` +
+          'Освободите слот в «📱 Мои устройства».',
+        ui.backKeyboard(),
+      );
+      return;
+    }
+    const kb = new InlineKeyboard()
+      .text('✅ Добавить', 'config:add')
+      .text('⬅️ Отменить', 'menu:main');
+    await this.render(
+      ctx,
+      '📲 <b>Новый конфиг</b>\n\n' +
+        'Создадим конфиг для стороннего приложения (Happ, v2rayNG…). ' +
+        `Он займёт одно устройство тарифа (сейчас занято ${used} из ${limit}).\n\n` +
+        'Добавить?',
+      kb,
+    );
+  }
+
+  private async addConfig(ctx: Context): Promise<void> {
+    const userId = await this.getUserId(ctx);
     const device = await this.devices.register(userId, {
       name: 'Внешний конфиг',
       platform: DevicePlatform.IOS,
@@ -274,10 +310,10 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const conn = await this.devices.getConnection(userId, device.id);
     await this.render(
       ctx,
-      '📲 <b>Конфиг для стороннего приложения</b>\n\n' +
-        'Импортируйте ссылку в клиент с поддержкой VLESS + XHTTP (Happ, v2RayTun, v2rayNG и т.п.):\n\n' +
+      '📲 <b>Конфиг готов</b>\n\n' +
+        'Импортируйте ссылку в клиент с поддержкой VLESS + XHTTP (Happ, v2RayTun, v2rayNG):\n\n' +
         `<code>${ui.escapeHtml(conn.uri)}</code>\n\n` +
-        'Конфиг учитывается в лимите устройств тарифа — удалить можно в «📱 Мои устройства».',
+        'Учитывается в лимите устройств — удалить можно в «📱 Мои устройства».',
       ui.backKeyboard(),
     );
   }

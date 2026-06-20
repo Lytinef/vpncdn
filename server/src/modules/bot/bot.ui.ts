@@ -102,7 +102,10 @@ export function plansKeyboard(
   const kb = new InlineKeyboard();
   for (const p of plans) {
     const mark = p.code === currentCode ? ' ✓' : '';
-    kb.text(`${p.name} — ${kopecksToRubles(p.priceKopecks)} ₽/мес${mark}`, `${action}:${p.code}`).row();
+    kb.text(
+      `${p.name} · ${p.deviceLimit} устр. — ${kopecksToRubles(p.priceKopecks)} ₽/мес${mark}`,
+      `${action}:${p.code}`,
+    ).row();
   }
   return kb.text('⬅️ В меню', 'menu:main');
 }
