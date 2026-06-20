@@ -22,6 +22,14 @@ class Plan {
         deviceLimit: j['deviceLimit'],
         durationDays: j['durationDays'],
       );
+
+  Map<String, dynamic> toJson() => {
+        'code': code,
+        'name': name,
+        'priceRub': priceRub,
+        'deviceLimit': deviceLimit,
+        'durationDays': durationDays,
+      };
 }
 
 class Subscription {
@@ -59,6 +67,16 @@ class Subscription {
         autoRenew: j['autoRenew'] ?? false,
         cancelAtPeriodEnd: j['cancelAtPeriodEnd'] ?? false,
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'status': status,
+        'plan': plan.toJson(),
+        'nextPlan': nextPlan?.toJson(),
+        'currentPeriodEnd': currentPeriodEnd?.toIso8601String(),
+        'autoRenew': autoRenew,
+        'cancelAtPeriodEnd': cancelAtPeriodEnd,
+      };
 }
 
 class UserProfile {
@@ -75,6 +93,13 @@ class UserProfile {
         firstName: j['firstName'],
         photoUrl: j['photoUrl'],
       );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'username': username,
+        'firstName': firstName,
+        'photoUrl': photoUrl,
+      };
 }
 
 class AccountState {
@@ -98,6 +123,12 @@ class AccountState {
         devicesUsed: j['devices']['used'],
         devicesLimit: j['devices']['limit'],
       );
+
+  Map<String, dynamic> toJson() => {
+        'user': user.toJson(),
+        'subscription': subscription?.toJson(),
+        'devices': {'used': devicesUsed, 'limit': devicesLimit},
+      };
 }
 
 class Device {
@@ -143,7 +174,7 @@ class VlessConnection {
         sni: j['sni'],
         wsPath: j['wsPath'],
         wsHost: j['wsHost'],
-        uri: j['uri'],
+        uri: j['uri'] ?? '',
       );
 
   Map<String, dynamic> toMap() => {
@@ -153,6 +184,7 @@ class VlessConnection {
         'sni': sni,
         'wsPath': wsPath,
         'wsHost': wsHost,
+        'uri': uri,
       };
 }
 

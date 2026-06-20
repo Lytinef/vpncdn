@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/api.dart';
+import '../services/api_client.dart';
 import '../services/settings_store.dart';
 import '../services/device_identity.dart';
 import '../services/vpn_engine.dart';
@@ -23,6 +25,9 @@ class VpnController extends ChangeNotifier {
   VpnStats stats = VpnStats();
   String? error;
   BypassList? _bypassCache;
+
+  /// Вызывается один раз после успешного подключения — обновить/проверить аккаунт.
+  Future<void> Function()? onConnected;
 
   bool get isConnected => stage == VpnStage.connected;
   bool get isBusy => stage == VpnStage.connecting || stage == VpnStage.disconnecting;
@@ -90,9 +95,7 @@ class VpnController extends ChangeNotifier {
   Future<void> connect() async {
     error = null;
     try {
-      final deviceId = await _ensureDevice();
-      final connection = await _api.connection(deviceId);
-      final bypass = await _loadBypass();
+      final config = await _resolveConfig();
 
       final ok = await _engine.prepare();
       if (!ok) {
@@ -100,22 +103,78 @@ class VpnController extends ChangeNotifier {
         notifyListeners();
         return;
       }
-
-      final config = TunnelConfig(
-        connection: connection,
-        killSwitch: _settings.killSwitch,
-        bypassEnabled: _settings.bypassEnabled,
-        bypassApps: bypass.apps.map((e) => e.value).toList(),
-        bypassDomains: bypass.domains.map((e) => e.value).toList(),
-        splitEnabled: _settings.splitEnabled,
-        splitMode: _settings.splitMode,
-        splitApps: _settings.splitApps,
-      );
       await _engine.connect(config);
     } catch (e) {
       error = e.toString();
       stage = VpnStage.error;
       notifyListeners();
+    }
+  }
+
+  /// Конфиг туннеля: пробуем получить свежий с сервера (с таймаутом); если сеть
+  /// недоступна (глушат связь) — берём последний кэш. Бизнес-ошибки сервера
+  /// (нет подписки / лимит устройств) НЕ подменяем кэшем, а показываем.
+  Future<TunnelConfig> _resolveConfig() async {
+    try {
+      final config =
+          await _buildConfigOnline().timeout(const Duration(seconds: 12));
+      _cacheConfig(config);
+      return config;
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      final cached = _loadCachedConfig();
+      if (cached != null) return cached;
+      rethrow;
+    }
+  }
+
+  Future<TunnelConfig> _buildConfigOnline() async {
+    final deviceId = await _ensureDevice();
+    final connection = await _api.connection(deviceId);
+    final bypass = await _loadBypass();
+    return _composeConfig(
+      connection,
+      bypass.apps.map((e) => e.value).toList(),
+      bypass.domains.map((e) => e.value).toList(),
+    );
+  }
+
+  TunnelConfig _composeConfig(
+    VlessConnection connection,
+    List<String> bypassApps,
+    List<String> bypassDomains,
+  ) =>
+      TunnelConfig(
+        connection: connection,
+        killSwitch: _settings.killSwitch,
+        bypassEnabled: _settings.bypassEnabled,
+        bypassApps: bypassApps,
+        bypassDomains: bypassDomains,
+        splitEnabled: _settings.splitEnabled,
+        splitMode: _settings.splitMode,
+        splitApps: _settings.splitApps,
+      );
+
+  void _cacheConfig(TunnelConfig config) {
+    _settings.cachedConnection = jsonEncode(config.connection.toMap());
+    _settings.cachedBypassApps = config.bypassApps;
+    _settings.cachedBypassDomains = config.bypassDomains;
+  }
+
+  TunnelConfig? _loadCachedConfig() {
+    final raw = _settings.cachedConnection;
+    if (raw == null) return null;
+    try {
+      final connection =
+          VlessConnection.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      return _composeConfig(
+        connection,
+        _settings.cachedBypassApps,
+        _settings.cachedBypassDomains,
+      );
+    } catch (_) {
+      return null;
     }
   }
 
@@ -128,10 +187,12 @@ class VpnController extends ChangeNotifier {
     }
   }
 
-  /// Регистрирует устройство при первом подключении и кеширует его id.
+  /// Регистрирует устройство при каждом онлайн-подключении. Регистрация
+  /// идемпотентна по hardwareId: сервер переиспользует устройство текущего
+  /// аккаунта либо создаёт новое. Это чинит удаление устройства в админке/боте
+  /// (раньше клиент «залипал» на старом id и не мог подключиться) и смену
+  /// аккаунта (устройство регистрируется в новом аккаунте).
   Future<String> _ensureDevice() async {
-    final existing = _settings.deviceId;
-    if (existing != null) return existing;
     final ident = await DeviceIdentity.resolve();
     final device = await _api.registerDevice(
       name: ident.name,
@@ -148,9 +209,13 @@ class VpnController extends ChangeNotifier {
   }
 
   void _onStatus(VpnStatus s) {
+    final wasConnected = stage == VpnStage.connected;
     stage = s.stage;
     if (s.stage == VpnStage.error) error = s.message;
     notifyListeners();
+    if (s.stage == VpnStage.connected && !wasConnected) {
+      onConnected?.call();
+    }
   }
 
   void _onStats(VpnStats s) {

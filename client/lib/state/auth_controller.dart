@@ -1,26 +1,38 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/api.dart';
 import '../services/secure_store.dart';
+import '../services/settings_store.dart';
 
 enum AuthStatus { unknown, signedOut, signedIn }
 
 class AuthController extends ChangeNotifier {
   final Api _api;
   final SecureStore _store;
+  final SettingsStore _settings;
 
-  AuthController(this._api, this._store);
+  AuthController(this._api, this._store, this._settings);
 
   AuthStatus status = AuthStatus.unknown;
   AccountState? account;
   String? error;
 
   Future<void> bootstrap() async {
-    status = (await _store.hasSession) ? AuthStatus.signedIn : AuthStatus.signedOut;
+    final signed = await _store.hasSession;
+    // Сразу поднимаем кэш аккаунта — чтобы гейтинг подключения работал офлайн.
+    if (signed) _restoreCachedAccount();
+    status = signed ? AuthStatus.signedIn : AuthStatus.signedOut;
     notifyListeners();
-    if (status == AuthStatus.signedIn) {
-      await loadAccount();
-    }
+    if (signed) await loadAccount(); // фоновое обновление, если сеть доступна
+  }
+
+  void _restoreCachedAccount() {
+    final raw = _settings.cachedAccount;
+    if (raw == null) return;
+    try {
+      account = AccountState.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {}
   }
 
   /// Сохраняет токены и подтягивает аккаунт.
@@ -41,8 +53,10 @@ class AuthController extends ChangeNotifier {
     try {
       account = await _api.me();
       error = null;
+      _settings.cachedAccount = jsonEncode(account!.toJson());
     } catch (e) {
       error = e.toString();
+      // Сеть недоступна — оставляем кэш как есть (не сбрасываем подписку).
     }
     notifyListeners();
   }
@@ -57,6 +71,7 @@ class AuthController extends ChangeNotifier {
       } catch (_) {}
     }
     await _store.clear();
+    await _settings.clearSession();
     account = null;
     status = AuthStatus.signedOut;
     notifyListeners();
@@ -67,6 +82,7 @@ class AuthController extends ChangeNotifier {
       await _api.logoutAll();
     } catch (_) {}
     await _store.clear();
+    await _settings.clearSession();
     account = null;
     status = AuthStatus.signedOut;
     notifyListeners();
@@ -75,6 +91,7 @@ class AuthController extends ChangeNotifier {
   Future<void> deleteAccount() async {
     await _api.deleteAccount();
     await _store.clear();
+    await _settings.clearSession();
     account = null;
     status = AuthStatus.signedOut;
     notifyListeners();
@@ -83,6 +100,7 @@ class AuthController extends ChangeNotifier {
   void forceSignOut() {
     account = null;
     status = AuthStatus.signedOut;
+    _settings.clearSession();
     notifyListeners();
   }
 }

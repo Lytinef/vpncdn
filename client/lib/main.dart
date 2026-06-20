@@ -23,12 +23,19 @@ Future<void> main() async {
   final client = ApiClient(store);
   final api = Api(client);
 
-  final auth = AuthController(api, store);
+  final auth = AuthController(api, store, settings);
   final vpn = VpnController(api, VpnEngine(), settings);
   final update = UpdateController(api);
 
   // Принудительный разлогин при окончательной потере сессии.
   client.onUnauthorized = auth.forceSignOut;
+
+  // После подключения к VPN сервер доступен через туннель — обновляем аккаунт и
+  // отключаемся, если подписка перестала быть активной.
+  vpn.onConnected = () async {
+    await auth.loadAccount();
+    if (!auth.hasActiveSubscription) await vpn.disconnect();
+  };
 
   await auth.bootstrap();
   await vpn.init();
