@@ -15,7 +15,6 @@ class WindowsVpnEngine implements VpnEngine {
   static const _socksPort = 10808;
   static const _tunAddr = '198.18.0.1';
   static const _tunMask = '255.255.255.0';
-  static const _probeUrl = 'https://www.gstatic.com/generate_204';
 
   final _statusCtrl = StreamController<VpnStatus>.broadcast();
   VpnStage _stage = VpnStage.disconnected;
@@ -246,20 +245,31 @@ class WindowsVpnEngine implements VpnEngine {
     return false;
   }
 
-  /// HTTP-запрос через туннель (после настройки маршрутов весь трафик идёт в TUN).
+  /// Проверка через туннель строго по IPv4 (IPv6 в туннель не заворачивается и
+  /// раньше давал многосекундную задержку на коннекте — отсюда «долгое
+  /// подключение»). Читаем реальный HTTP-ответ — значит туннель достаёт сквозь.
   Future<int> _measure() async {
+    const host = 'cp.cloudflare.com';
     final sw = Stopwatch()..start();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
+    Socket? sock;
     try {
-      final req = await client.getUrl(Uri.parse(_probeUrl));
-      final resp = await req.close().timeout(const Duration(seconds: 5));
-      await resp.drain();
-      return (resp.statusCode >= 200 && resp.statusCode < 400) ? sw.elapsedMilliseconds : -1;
+      final ips = await InternetAddress.lookup(host, type: InternetAddressType.IPv4)
+          .timeout(const Duration(seconds: 5));
+      if (ips.isEmpty) return -1;
+      sock = await Socket.connect(ips.first, 80, timeout: const Duration(seconds: 5));
+      sock.write('GET /generate_204 HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n');
+      await sock.flush();
+      final resp = await sock
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .join()
+          .timeout(const Duration(seconds: 5));
+      return resp.startsWith('HTTP/') ? sw.elapsedMilliseconds : -1;
     } catch (e) {
       _logLine('probe error: $e');
       return -1;
     } finally {
-      client.close(force: true);
+      sock?.destroy();
     }
   }
 

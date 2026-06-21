@@ -20,7 +20,7 @@ if (-not (Test-Path $iscc)) {
 
 # 2) Ensure the app is built.
 $buildDir = Join-Path $root "..\client\build\windows\x64\runner\Release"
-if (-not (Test-Path (Join-Path $buildDir "vpncdn_client.exe"))) {
+if (-not (Test-Path (Join-Path $buildDir "unway.exe"))) {
   throw "Build not found. Run first: cd client; flutter build windows --release"
 }
 

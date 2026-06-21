@@ -7,7 +7,7 @@
   #define AppVersion "1.0.0"
 #endif
 #define Publisher "Unway"
-#define ExeName "vpncdn_client.exe"
+#define ExeName "unway.exe"
 ; Built app folder, relative to this .iss.
 #define BuildDir "..\client\build\windows\x64\runner\Release"
 
