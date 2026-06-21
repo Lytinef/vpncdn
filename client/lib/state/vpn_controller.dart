@@ -15,16 +15,17 @@ class VpnController extends ChangeNotifier {
 
   VpnController(this._api, this._engine, this._settings) {
     _statusSub = _engine.statusStream.listen(_onStatus);
-    _statsSub = _engine.statsStream.listen(_onStats);
   }
 
   late final StreamSubscription _statusSub;
-  late final StreamSubscription _statsSub;
 
   VpnStage stage = VpnStage.disconnected;
-  VpnStats stats = VpnStats();
   String? error;
   BypassList? _bypassCache;
+
+  /// Пинг по запросу (мс) и флаг измерения.
+  int? lastPingMs;
+  bool pinging = false;
 
   /// Вызывается один раз после успешного подключения — обновить/проверить аккаунт.
   Future<void> Function()? onConnected;
@@ -187,6 +188,20 @@ class VpnController extends ChangeNotifier {
     }
   }
 
+  /// Измеряет пинг по запросу (как в v2rayNG/Happ). Только при активном подключении.
+  Future<void> pingNow() async {
+    if (!isConnected || pinging) return;
+    pinging = true;
+    notifyListeners();
+    try {
+      lastPingMs = await _engine.pingNow();
+    } catch (_) {
+      lastPingMs = null;
+    }
+    pinging = false;
+    notifyListeners();
+  }
+
   /// Регистрирует устройство при каждом онлайн-подключении. Регистрация
   /// идемпотентна по hardwareId: сервер переиспользует устройство текущего
   /// аккаунта либо создаёт новое. Это чинит удаление устройства в админке/боте
@@ -212,21 +227,16 @@ class VpnController extends ChangeNotifier {
     final wasConnected = stage == VpnStage.connected;
     stage = s.stage;
     if (s.stage == VpnStage.error) error = s.message;
+    if (s.stage != VpnStage.connected) lastPingMs = null;
     notifyListeners();
     if (s.stage == VpnStage.connected && !wasConnected) {
       onConnected?.call();
     }
   }
 
-  void _onStats(VpnStats s) {
-    stats = s;
-    notifyListeners();
-  }
-
   @override
   void dispose() {
     _statusSub.cancel();
-    _statsSub.cancel();
     super.dispose();
   }
 }

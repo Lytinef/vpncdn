@@ -44,8 +44,10 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 16),
             ],
             _ConnectionCard(vpn: vpn, hasSub: hasSub, context: context),
-            const SizedBox(height: 16),
-            _MetricsRow(stats: vpn.stats, connected: vpn.isConnected),
+            if (vpn.isConnected) ...[
+              const SizedBox(height: 16),
+              _PingCard(vpn: vpn),
+            ],
             const SizedBox(height: 20),
             _SubscriptionBanner(
               statusText: hasSub
@@ -167,39 +169,31 @@ class _ConnectionCard extends StatelessWidget {
   }
 }
 
-class _MetricsRow extends StatelessWidget {
-  final VpnStats stats;
-  final bool connected;
-  const _MetricsRow({required this.stats, required this.connected});
+class _PingCard extends StatelessWidget {
+  final VpnController vpn;
+  const _PingCard({required this.vpn});
 
   @override
   Widget build(BuildContext context) {
-    String v(num x, String unit) => connected ? '${x.toStringAsFixed(unit == 'ms' ? 0 : 1)} $unit' : '—';
-    return Row(
-      children: [
-        _metric('Пинг', v(stats.pingMs, 'ms'), Icons.network_check),
-        _metric('Загрузка', v(stats.downloadMbps, 'Mbps'), Icons.download),
-        _metric('Отдача', v(stats.uploadMbps, 'Mbps'), Icons.upload),
-      ],
+    final ping = vpn.lastPingMs;
+    final subtitle = vpn.pinging
+        ? 'измеряем…'
+        : (ping != null ? '$ping ms' : 'нажмите «Проверить»');
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.network_check, color: Color(0xFF8B98A5)),
+        title: const Text('Пинг'),
+        subtitle: Text(subtitle),
+        trailing: vpn.pinging
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : TextButton(onPressed: vpn.pingNow, child: const Text('Проверить')),
+      ),
     );
   }
-
-  Widget _metric(String label, String value, IconData icon) => Expanded(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              children: [
-                Icon(icon, size: 20, color: const Color(0xFF8B98A5)),
-                const SizedBox(height: 8),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(label, style: const TextStyle(color: Color(0xFF8B98A5), fontSize: 12)),
-              ],
-            ),
-          ),
-        ),
-      );
 }
 
 class _SubscriptionBanner extends StatelessWidget {

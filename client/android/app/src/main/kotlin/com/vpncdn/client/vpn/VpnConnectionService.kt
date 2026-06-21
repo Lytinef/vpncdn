@@ -17,6 +17,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
@@ -32,7 +33,6 @@ class VpnConnectionService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var xray: XrayCore? = null
     private var tun2socks: Tun2socks? = null
-    private var stats: StatsCollector? = null
     private var killSwitch = false
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -43,7 +43,10 @@ class VpnConnectionService : VpnService() {
                     // Сохраняем для автозапуска при загрузке.
                     getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
                         .edit().putString(KEY_LAST_CONFIG, cfg).apply()
-                    connect(cfg)
+                    startForegroundNotification()
+                    VpnBus.setStage("connecting")
+                    // Тяжёлая инициализация + проверка доступности — вне главного потока.
+                    scope.launch { connect(cfg) }
                 }
             }
             ACTION_DISCONNECT -> disconnect()
@@ -52,8 +55,6 @@ class VpnConnectionService : VpnService() {
     }
 
     private fun connect(configJson: String) {
-        VpnBus.setStage("connecting")
-        startForegroundNotification()
         try {
             val cfg = JSONObject(configJson)
             val conn = cfg.getJSONObject("connection")
@@ -92,8 +93,13 @@ class VpnConnectionService : VpnService() {
                 it.start(filesDir, tun!!.fd, socksPort, mtu, dns)
             }
 
-            // 4) Метрики.
-            stats = StatsCollector(scope) { xray?.queryTraffic() ?: (0L to 0L) }.also { it.start() }
+            // 4) Подтверждаем, что туннель реально достаёт до сервера (а не просто
+            // поднялся TUN): пробное соединение через SOCKS Xray. Иначе «Подключено»
+            // показывалось бы даже без интернета.
+            if (!ProxyProbe.reachable(socksPort, 6000)) {
+                fail("Не удалось подключиться к серверу")
+                return
+            }
 
             VpnBus.setStage("connected")
             Log.i(TAG, "VPN подключён")
@@ -156,7 +162,6 @@ class VpnConnectionService : VpnService() {
 
     private fun disconnect() {
         VpnBus.setStage("disconnecting")
-        stats?.stop(); stats = null
         tun2socks?.stop(); tun2socks = null
         xray?.stop(); xray = null
         try { tun?.close() } catch (_: Exception) {}

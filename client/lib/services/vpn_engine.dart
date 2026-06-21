@@ -60,10 +60,8 @@ class TunnelConfig {
 class VpnEngine {
   static const _method = MethodChannel('vpncdn/vpn');
   static const _status = EventChannel('vpncdn/vpn/status');
-  static const _statsCh = EventChannel('vpncdn/vpn/stats');
 
   Stream<VpnStatus>? _statusStream;
-  Stream<VpnStats>? _statsStream;
 
   Stream<VpnStatus> get statusStream {
     _statusStream ??= _status.receiveBroadcastStream().map((e) {
@@ -79,11 +77,6 @@ class VpnEngine {
     return _statusStream!;
   }
 
-  Stream<VpnStats> get statsStream {
-    _statsStream ??= _statsCh.receiveBroadcastStream().map((e) => VpnStats.fromMap(e as Map));
-    return _statsStream!;
-  }
-
   /// Запрашивает у системы разрешение на VPN (Android prepare()).
   Future<bool> prepare() async => (await _method.invokeMethod<bool>('prepare')) ?? false;
 
@@ -97,10 +90,10 @@ class VpnEngine {
     return VpnStage.values.firstWhere((e) => e.name == s, orElse: () => VpnStage.disconnected);
   }
 
-  /// Мгновенный замер метрик (ping/скорость) даже без активного стрима.
-  Future<VpnStats> measure() async {
-    final m = await _method.invokeMethod<Map>('measure');
-    return m != null ? VpnStats.fromMap(m) : VpnStats();
+  /// Замер пинга по запросу (через SOCKS-туннель). null — если недоступно.
+  Future<int?> pingNow() async {
+    final ms = await _method.invokeMethod<int>('pingNow');
+    return (ms != null && ms >= 0) ? ms : null;
   }
 
   /// Список установленных приложений (для раздельного туннелирования).
