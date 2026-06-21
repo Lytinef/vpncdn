@@ -1,7 +1,7 @@
 name: vpncdn_client
-description: VPN-over-NGENIX-CDN клиент (Android, далее Windows/iOS)
+description: VPN-over-CDN клиент 
 publish_to: "none"
-version: 0.9.0+1
+version: 1.0.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

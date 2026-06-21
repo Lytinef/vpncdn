@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/services.dart';
 import '../models/models.dart';
+import 'windows_vpn_engine.dart';
 
 enum VpnStage { disconnected, connecting, connected, disconnecting, error }
 
@@ -56,13 +58,32 @@ class TunnelConfig {
       };
 }
 
-/// Мост к нативному VPN-ядру (Android VpnService + Xray).
-class VpnEngine {
+/// Абстракция нативного VPN-движка. Android — VpnService+Xray через каналы;
+/// Windows — управление процессами xray.exe + tun2socks.
+abstract class VpnEngine {
+  Stream<VpnStatus> get statusStream;
+  Future<bool> prepare();
+  Future<void> connect(TunnelConfig config);
+  Future<void> disconnect();
+  Future<VpnStage> currentStage();
+  Future<int?> pingNow();
+  Future<List<InstalledApp>> installedApps();
+  Future<void> setAutoStart(bool enabled);
+  Future<void> setStatsActive(bool active);
+}
+
+/// Выбор реализации по платформе.
+VpnEngine createVpnEngine() =>
+    Platform.isWindows ? WindowsVpnEngine() : AndroidVpnEngine();
+
+/// Android: мост к VpnService + Xray через MethodChannel/EventChannel.
+class AndroidVpnEngine implements VpnEngine {
   static const _method = MethodChannel('vpncdn/vpn');
   static const _status = EventChannel('vpncdn/vpn/status');
 
   Stream<VpnStatus>? _statusStream;
 
+  @override
   Stream<VpnStatus> get statusStream {
     _statusStream ??= _status.receiveBroadcastStream().map((e) {
       final m = e as Map;
@@ -77,36 +98,39 @@ class VpnEngine {
     return _statusStream!;
   }
 
-  /// Запрашивает у системы разрешение на VPN (Android prepare()).
+  @override
   Future<bool> prepare() async => (await _method.invokeMethod<bool>('prepare')) ?? false;
 
+  @override
   Future<void> connect(TunnelConfig config) =>
       _method.invokeMethod('connect', config.toMap());
 
+  @override
   Future<void> disconnect() => _method.invokeMethod('disconnect');
 
+  @override
   Future<VpnStage> currentStage() async {
     final s = await _method.invokeMethod<String>('stage');
     return VpnStage.values.firstWhere((e) => e.name == s, orElse: () => VpnStage.disconnected);
   }
 
-  /// Замер пинга по запросу (через SOCKS-туннель). null — если недоступно.
+  @override
   Future<int?> pingNow() async {
     final ms = await _method.invokeMethod<int>('pingNow');
     return (ms != null && ms >= 0) ? ms : null;
   }
 
-  /// Список установленных приложений (для раздельного туннелирования).
+  @override
   Future<List<InstalledApp>> installedApps() async {
     final list = await _method.invokeMethod<List>('installedApps') ?? [];
     return list.map((e) => InstalledApp.fromMap(e as Map)).toList();
   }
 
-  /// Включить/выключить автозапуск при старте системы.
+  @override
   Future<void> setAutoStart(bool enabled) =>
       _method.invokeMethod('setAutoStart', {'enabled': enabled});
 
-  /// Активны ли замеры пинга/скорости (только на переднем плане — экономия батареи).
+  @override
   Future<void> setStatsActive(bool active) =>
       _method.invokeMethod('setStatsActive', {'active': active});
 }

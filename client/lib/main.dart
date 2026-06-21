@@ -24,7 +24,7 @@ Future<void> main() async {
   final api = Api(client);
 
   final auth = AuthController(api, store, settings);
-  final vpn = VpnController(api, VpnEngine(), settings);
+  final vpn = VpnController(api, createVpnEngine(), settings);
   final update = UpdateController(api);
 
   // Принудительный разлогин при окончательной потере сессии.
