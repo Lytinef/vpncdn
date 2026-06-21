@@ -50,7 +50,7 @@ class MainActivity : FlutterActivity() {
                 "pingNow" -> {
                     // Замер пинга по запросу через SOCKS Xray (в фоне, без блокировки UI).
                     Thread {
-                        val ms = com.vpncdn.client.vpn.ProxyProbe.latencyMs(10808, "1.1.1.1", 443, 5000)
+                        val ms = com.vpncdn.client.vpn.ProxyProbe.latencyMs(10808, 5000)
                         runOnUiThread { result.success(ms.toInt()) }
                     }.start()
                 }
