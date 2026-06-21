@@ -106,7 +106,9 @@ class _ConnectionCard extends StatelessWidget {
         child: Column(
           children: [
             GestureDetector(
-              onTap: busy ? null : () => _toggle(context, vpn, hasSub),
+              onTap: vpn.stage == VpnStage.disconnecting
+                  ? null
+                  : () => _toggle(context, vpn, hasSub),
               child: Container(
                 width: 160,
                 height: 160,
@@ -140,7 +142,7 @@ class _ConnectionCard extends StatelessWidget {
   }
 
   void _toggle(BuildContext context, VpnController vpn, bool hasSub) {
-    if (vpn.isConnected) {
+    if (vpn.isConnected || vpn.stage == VpnStage.connecting) {
       vpn.disconnect();
       return;
     }
