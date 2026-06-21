@@ -4,7 +4,9 @@ class AppConfig {
   /// flutter build apk --dart-define=API_BASE_URL=https://api.example.com
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000', // 10.0.2.2 — localhost хоста для эмулятора Android
+    // Прод по умолчанию — обычный `flutter build` сразу рабочий.
+    // Для эмулятора/локалки: --dart-define=API_BASE_URL=http://10.0.2.2:3000
+    defaultValue: 'https://api.lytinef.ru',
   );
 
   static String get apiUrl => '$apiBaseUrl/api';
