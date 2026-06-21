@@ -83,9 +83,12 @@ class WindowsVpnEngine implements VpnEngine {
 
   @override
   Future<void> connect(TunnelConfig config) async {
+    // Защита от повторного/двойного запуска (двойной тап и т.п.).
+    if (_stage == VpnStage.connecting || _stage == VpnStage.connected) return;
     _log = File('${_workDir.path}\\windows-vpn.log').openWrite(mode: FileMode.append);
     _setStage(VpnStage.connecting);
     try {
+      await _killOrphans(); // подчищаем зависшие процессы прошлой попытки
       final conn = config.connection;
 
       // 1) Конфиг Xray.
@@ -114,7 +117,7 @@ class WindowsVpnEngine implements VpnEngine {
       // 4) tun2socks (создаёт wintun-адаптер).
       _tun2socks = await Process.start(
         '$_binDir\\tun2socks.exe',
-        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-loglevel', 'warning'],
+        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-loglevel', 'warn'],
         workingDirectory: _binDir,
       );
       _pipe(_tun2socks!, 'tun2socks');
@@ -215,10 +218,11 @@ class WindowsVpnEngine implements VpnEngine {
         await _run('route', ['delete', ip]);
       }
     } catch (_) {}
-    _tun2socks?.kill();
+    _tun2socks?.kill(ProcessSignal.sigkill);
     _tun2socks = null;
-    _xray?.kill();
+    _xray?.kill(ProcessSignal.sigkill);
     _xray = null;
+    await _killOrphans();
     _serverIps.clear();
     _tunIfIndex = null;
     _logLine('teardown done');
@@ -265,6 +269,12 @@ class WindowsVpnEngine implements VpnEngine {
   Future<String> _ps(String script) async {
     final r = await Process.run('powershell', ['-NoProfile', '-Command', script]);
     return (r.stdout as String?) ?? '';
+  }
+
+  /// Принудительно завершает зависшие наши процессы (порт 10808 и т.п.).
+  Future<void> _killOrphans() async {
+    await _run('taskkill', ['/F', '/T', '/IM', 'tun2socks.exe']);
+    await _run('taskkill', ['/F', '/T', '/IM', 'xray.exe']);
   }
 
   Future<void> _run(String exe, List<String> args) async {
