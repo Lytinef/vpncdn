@@ -8,6 +8,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, LessThanOrEqual } from 'typeorm';
 import { Plan, PlanCode } from './entities/plan.entity';
 import { Subscription, SubscriptionStatus } from './entities/subscription.entity';
+import { TrialLedger } from './entities/trial-ledger.entity';
+import { UsersService } from '../users/users.service';
 
 /** Статусы, при которых у пользователя есть доступ к VPN (пока период не истёк). */
 const ACCESS_STATUSES = [
@@ -25,6 +27,9 @@ export class SubscriptionsService {
     private readonly plans: Repository<Plan>,
     @InjectRepository(Subscription)
     private readonly subs: Repository<Subscription>,
+    @InjectRepository(TrialLedger)
+    private readonly trialLedger: Repository<TrialLedger>,
+    private readonly users: UsersService,
   ) {}
 
   listActivePlans(): Promise<Plan[]> {
@@ -95,6 +100,18 @@ export class SubscriptionsService {
   async grantTrialIfNew(userId: string): Promise<Subscription | null> {
     const existing = await this.getLatest(userId);
     if (existing) return null;
+    const user = await this.users.findById(userId);
+    if (!user) return null;
+    // Анти-абуз: триал — один раз на Telegram-аккаунт навсегда. Реестр переживает
+    // удаление/пересоздание аккаунта, поэтому «удалил → создал заново» новый триал
+    // не даст.
+    const used = await this.trialLedger.findOne({
+      where: { telegramId: user.telegramId },
+    });
+    if (used) {
+      this.logger.log(`Триал для tg=${user.telegramId} уже выдавался — пропуск`);
+      return null;
+    }
     const plan = await this.getPlanByCode(PlanCode.TRIAL);
     if (!plan) {
       this.logger.warn(`Пробный тариф (trial) не найден — триал для ${userId} не выдан`);
@@ -112,10 +129,15 @@ export class SubscriptionsService {
       cancelAtPeriodEnd: false,
       failedRenewals: 0,
     });
-    this.logger.log(
-      `Пользователю ${userId} выдан пробный период до ${sub.currentPeriodEnd!.toISOString()}`,
+    const saved = await this.subs.save(sub);
+    await this.trialLedger.save(
+      this.trialLedger.create({ telegramId: user.telegramId }),
     );
-    return this.subs.save(sub);
+    this.logger.log(
+      `Пользователю ${userId} (tg=${user.telegramId}) выдан пробный период до ` +
+        `${saved.currentPeriodEnd!.toISOString()}`,
+    );
+    return saved;
   }
 
   /**
