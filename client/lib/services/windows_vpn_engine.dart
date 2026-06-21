@@ -231,18 +231,32 @@ class WindowsVpnEngine implements VpnEngine {
     _log = null;
   }
 
-  Future<bool> _probe() async => (await _measure()) >= 0;
+  /// Проверка доступности с ретраями: wintun-адаптеру и XHTTP-сессии Xray нужно
+  /// несколько секунд, чтобы «подняться» — первая попытка часто падает мгновенно
+  /// («сеть недоступна»), поэтому пробуем несколько раз.
+  Future<bool> _probe() async {
+    for (var i = 0; i < 8; i++) {
+      final ms = await _measure();
+      if (ms >= 0) {
+        _logLine('probe ok: ${ms}ms (попытка ${i + 1})');
+        return true;
+      }
+      await Future.delayed(const Duration(milliseconds: 1200));
+    }
+    return false;
+  }
 
   /// HTTP-запрос через туннель (после настройки маршрутов весь трафик идёт в TUN).
   Future<int> _measure() async {
     final sw = Stopwatch()..start();
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 6);
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 5);
     try {
       final req = await client.getUrl(Uri.parse(_probeUrl));
-      final resp = await req.close().timeout(const Duration(seconds: 6));
+      final resp = await req.close().timeout(const Duration(seconds: 5));
       await resp.drain();
       return (resp.statusCode >= 200 && resp.statusCode < 400) ? sw.elapsedMilliseconds : -1;
-    } catch (_) {
+    } catch (e) {
+      _logLine('probe error: $e');
       return -1;
     } finally {
       client.close(force: true);
