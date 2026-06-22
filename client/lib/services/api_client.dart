@@ -52,10 +52,16 @@ class ApiClient {
     final resp = await http.Response.fromStream(res);
 
     if (resp.statusCode == 401 && auth && !isRetry) {
-      final ok = await _tryRefresh();
-      if (ok) return _send(method, path, body: body, auth: auth, isRetry: true);
-      onUnauthorized?.call();
-      throw ApiException(401, 'Сессия истекла');
+      final r = await _tryRefresh();
+      if (r == true) return _send(method, path, body: body, auth: auth, isRetry: true);
+      if (r == false) {
+        // Сервер ОТКЛОНИЛ refresh — сессия действительно мертва, разлогиниваем.
+        onUnauthorized?.call();
+        throw ApiException(401, 'Сессия истекла');
+      }
+      // r == null: сеть недоступна/временная ошибка — НЕ разлогиниваем (частая
+      // причина «вылета из аккаунта» при плохом интернете с включённым VPN).
+      throw ApiException(503, 'Нет соединения с сервером');
     }
 
     if (resp.statusCode >= 200 && resp.statusCode < 300) {
@@ -84,23 +90,31 @@ class ApiClient {
     return req;
   }
 
-  Future<bool> _tryRefresh() async {
-    if (_refreshing) return false;
+  /// true — токены обновлены; false — сервер отклонил (сессия мертва, надо
+  /// разлогинить); null — сетевая/временная ошибка (сессию НЕ трогаем).
+  Future<bool?> _tryRefresh() async {
+    if (_refreshing) return null; // параллельное обновление — не разлогиниваем
     _refreshing = true;
     try {
       final refresh = await _store.refreshToken;
       if (refresh == null) return false;
-      final res = await _http.post(
-        Uri.parse('${AppConfig.apiUrl}/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': refresh}),
-      );
-      if (res.statusCode != 200) return false;
-      final b = jsonDecode(res.body);
-      await _store.saveTokens(b['accessToken'], b['refreshToken']);
-      return true;
+      final res = await _http
+          .post(
+            Uri.parse('${AppConfig.apiUrl}/auth/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refreshToken': refresh}),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        final b = jsonDecode(res.body);
+        await _store.saveTokens(b['accessToken'], b['refreshToken']);
+        return true;
+      }
+      // 401/403 — refresh недействителен (сессия мертва); прочее (5xx) — временно.
+      if (res.statusCode == 401 || res.statusCode == 403) return false;
+      return null;
     } catch (_) {
-      return false;
+      return null; // сеть недоступна — не разлогиниваем
     } finally {
       _refreshing = false;
     }

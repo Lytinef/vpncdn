@@ -116,7 +116,8 @@ class WindowsVpnEngine implements VpnEngine {
       // 4) tun2socks (создаёт wintun-адаптер).
       _tun2socks = await Process.start(
         '$_binDir\\tun2socks.exe',
-        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-loglevel', 'warn'],
+        // MTU 1280: меньше фрагментации сквозь XHTTP/TLS/CDN (скорость/рывки/пинг).
+        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-mtu', '1280', '-loglevel', 'warn'],
         workingDirectory: _binDir,
       );
       _pipe(_tun2socks!, 'tun2socks');

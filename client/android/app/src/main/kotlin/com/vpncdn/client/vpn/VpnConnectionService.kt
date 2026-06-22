@@ -314,7 +314,9 @@ class VpnConnectionService : VpnService() {
         private const val CHANNEL = "vpncdn_vpn"
         private const val NOTIF_ID = 1001
         private const val SOCKS_PORT = 10808
-        private const val MTU = 1500
+        // 1280: VLESS+XHTTP+TLS поверх CDN добавляют большую обёртку; 1500 на TUN
+        // приводил к фрагментации/потерям → низкая скорость, рывки, скачки пинга.
+        private const val MTU = 1280
         private const val DNS = "1.1.1.1"
         const val ACTION_CONNECT = "com.vpncdn.client.CONNECT"
         const val ACTION_DISCONNECT = "com.vpncdn.client.DISCONNECT"
