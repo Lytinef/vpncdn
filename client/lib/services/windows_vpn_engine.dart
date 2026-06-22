@@ -92,9 +92,10 @@ class WindowsVpnEngine implements VpnEngine {
 
       // 1) Конфиг Xray.
       final cfgFile = File('${_workDir.path}\\xray-config.json');
-      await cfgFile.writeAsString(_buildXrayConfig(config));
-
-      // 2) Реальный шлюз/интерфейс и IP сервера — для host-route в обход туннеля.
+      // 1) Реальный шлюз/интерфейс и IP сервера — для host-route в обход туннеля.
+      // Резолвим ДО конфига: xray пойдёт на конкретный edge-IP (тот, что исключим
+      // из туннеля), иначе он сам резолвит CDN-домен в другой ротируемый IP NGENIX,
+      // который заворачивается в TUN → петля → долгий коннект и высокий пинг.
       _gateway = await _defaultGateway();
       _serverIps
         ..clear()
@@ -103,6 +104,10 @@ class WindowsVpnEngine implements VpnEngine {
       if (_gateway == null || _serverIps.isEmpty) {
         throw Exception('Не удалось определить шлюз/адрес сервера');
       }
+
+      // 2) Конфиг Xray — vnext.address = конкретный edge-IP (Host/SNI = домен,
+      // NGENIX роутит по Host).
+      await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
 
       // 3) Xray.
       _xray = await Process.start(
@@ -317,7 +322,7 @@ class WindowsVpnEngine implements VpnEngine {
   }
 
   /// Конфиг Xray: SOCKS-вход (со sniffing для роутинга по домену) + VLESS+XHTTP.
-  String _buildXrayConfig(TunnelConfig config) {
+  String _buildXrayConfig(TunnelConfig config, String serverAddress) {
     final c = config.connection;
     final rules = <Map<String, dynamic>>[
       // Приватные сети — напрямую.
@@ -361,7 +366,7 @@ class WindowsVpnEngine implements VpnEngine {
           'settings': {
             'vnext': [
               {
-                'address': c.address,
+                'address': serverAddress,
                 'port': c.port,
                 'users': [
                   {'id': c.uuid, 'encryption': 'none'},
