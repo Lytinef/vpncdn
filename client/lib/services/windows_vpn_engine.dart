@@ -26,6 +26,7 @@ class WindowsVpnEngine implements VpnEngine {
   // Для отката маршрутов при отключении.
   String? _gateway; // реальный шлюз по умолчанию
   final List<String> _serverIps = [];
+  final List<String> _bypassIps = []; // IP доменов из списка обхода (идут мимо туннеля)
   int? _tunIfIndex;
 
   @override
@@ -105,6 +106,15 @@ class WindowsVpnEngine implements VpnEngine {
         throw Exception('Не удалось определить шлюз/адрес сервера');
       }
 
+      // Резолвим домены обхода ДО поднятия туннеля (реальный DNS → корректные,
+      // как правило РФ, IP) — потом завернём их мимо туннеля маршрутами.
+      _bypassIps
+        ..clear()
+        ..addAll(config.bypassEnabled
+            ? await _resolveBypassIps(config.bypassDomains)
+            : const <String>[]);
+      _logLine('bypass domains resolved: ${_bypassIps.length} IP');
+
       // 2) Конфиг Xray — vnext.address = конкретный edge-IP (Host/SNI = домен,
       // NGENIX роутит по Host).
       await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
@@ -138,6 +148,8 @@ class WindowsVpnEngine implements VpnEngine {
 
       _setStage(VpnStage.connected);
       _logLine('connected');
+      // Маршруты обхода добавляем в фоне — не задерживаем статус «Подключено».
+      unawaited(_addBypassRoutes());
     } catch (e) {
       _logLine('ошибка connect: $e');
       await _teardown();
@@ -228,6 +240,9 @@ class WindowsVpnEngine implements VpnEngine {
       for (final ip in _serverIps) {
         await _run('route', ['delete', ip]);
       }
+      for (final ip in _bypassIps) {
+        await _run('route', ['delete', ip]);
+      }
     } catch (_) {}
     _tun2socks?.kill(ProcessSignal.sigkill);
     _tun2socks = null;
@@ -235,6 +250,7 @@ class WindowsVpnEngine implements VpnEngine {
     _xray = null;
     await _killOrphans();
     _serverIps.clear();
+    _bypassIps.clear();
     _tunIfIndex = null;
     _logLine('teardown done');
     await _log?.flush();
@@ -301,6 +317,29 @@ class WindowsVpnEngine implements VpnEngine {
     }
   }
 
+  /// Резолвит домены обхода в IPv4 (параллельно, с таймаутом, сбои игнорируем).
+  Future<List<String>> _resolveBypassIps(List<String> domains) async {
+    final ips = <String>{};
+    await Future.wait(domains.map((d) async {
+      try {
+        final r = await InternetAddress.lookup(d, type: InternetAddressType.IPv4)
+            .timeout(const Duration(seconds: 3));
+        ips.addAll(r.map((a) => a.address));
+      } catch (_) {}
+    }));
+    return ips.toList();
+  }
+
+  /// Заворачивает IP доменов обхода мимо туннеля (через реальный шлюз).
+  Future<void> _addBypassRoutes() async {
+    final gw = _gateway;
+    if (gw == null) return;
+    for (final ip in _bypassIps) {
+      await _run('route', ['add', ip, 'mask', '255.255.255.255', gw, 'metric', '1']);
+    }
+    _logLine('bypass routes added: ${_bypassIps.length}');
+  }
+
   Future<String> _ps(String script) async {
     final r = await Process.run('powershell', ['-NoProfile', '-Command', script]);
     return (r.stdout as String?) ?? '';
@@ -332,21 +371,9 @@ class WindowsVpnEngine implements VpnEngine {
         'outboundTag': 'direct',
       },
     ];
-    if (config.bypassEnabled) {
-      // Xray-роутер ПАНИКУЕТ на не-ASCII (IDN) доменах вроде "честныйзнак.рф"
-      // (нужен punycode) → ядро падало, SOCKS не поднимался. Фильтруем не-ASCII и
-      // пустые (IDN-домены обхода — редкость).
-      final domains = config.bypassDomains
-          .where((d) => d.trim().isNotEmpty && d.runes.every((r) => r < 128))
-          .toList();
-      if (domains.isNotEmpty) {
-        rules.add({
-          'type': 'field',
-          'domain': domains,
-          'outboundTag': 'direct',
-        });
-      }
-    }
+    // Обход блокировок на Windows реализован МАРШРУТАМИ (host-route IP доменов мимо
+    // туннеля, см. _addBypassRoutes), а не правилом xray "direct": на Windows
+    // direct-трафик xray всё равно заворачивался бы обратно в TUN → петля.
     final cfg = {
       'log': {'loglevel': 'warning'},
       'inbounds': [
