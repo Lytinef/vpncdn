@@ -22,6 +22,12 @@ object XrayConfigBuilder {
         wsHost: String,
         bypassEnabled: Boolean,
         bypassDomains: List<String>,
+        security: String = "tls",
+        network: String = "xhttp",
+        flow: String = "",
+        publicKey: String = "",
+        shortId: String = "",
+        fingerprint: String = "chrome",
     ): String {
         val root = JSONObject()
         root.put("log", JSONObject().put("loglevel", "warning"))
@@ -42,45 +48,64 @@ object XrayConfigBuilder {
         root.put("inbounds", JSONArray().put(inbound))
 
         // ── outbound VLESS (proxy) ──
+        // flow (xtls-rprx-vision) ставится на пользователя только в прямом режиме.
         val user = JSONObject()
             .put("id", uuid)
             .put("encryption", "none")
             .put("level", 0)
+        if (security == "reality" && flow.isNotEmpty()) user.put("flow", flow)
         val vnext = JSONObject()
             .put("address", address)
             .put("port", port)
             .put("users", JSONArray().put(user))
         val proxySettings = JSONObject().put("vnext", JSONArray().put(vnext))
 
-        val tlsSettings = JSONObject()
-            .put("serverName", sni)
-            .put("allowInsecure", false)
-            .put("alpn", JSONArray(listOf("h2", "http/1.1")))
-        // XHTTP (SplitHTTP) — современный CDN-транспорт: устойчивее WS к буферизации/
-        // таймаутам CDN, работает по HTTP/1.1. mode=auto сам подбирает режим.
-        // xmux: несколько параллельных XHTTP-соединений + keepalive. Меньше
-        // head-of-line при потерях (всплески пинга) и обрывов простаивающих долгих
-        // соединений (CDN закрывает длинный запрос). Клиентский параметр.
-        val xmux = JSONObject()
-            .put("maxConcurrency", "16-32")
-            .put("maxConnections", 0)
-            .put("hMaxRequestTimes", "600-900")
-            .put("hKeepAlivePeriod", 30)
-        val xhttpSettings = JSONObject()
-            .put("path", wsPath)
-            .put("host", wsHost)
-            .put("mode", "auto")
-            .put("extra", JSONObject().put("xmux", xmux))
         // TCP keepalive: пробы только при простое соединения, на throughput не влияют.
         val sockopt = JSONObject()
             .put("tcpKeepAliveIdle", 30)
             .put("tcpKeepAliveInterval", 15)
-        val stream = JSONObject()
-            .put("network", "xhttp")
-            .put("security", "tls")
-            .put("xhttpSettings", xhttpSettings)
-            .put("tlsSettings", tlsSettings)
-            .put("sockopt", sockopt)
+
+        val stream: JSONObject
+        if (security == "reality") {
+            // Прямой режим (мимо CDN): VLESS + XTLS-Vision + Reality.
+            // Маскируется под настоящий TLS-сайт (serverName), минимум оверхеда → ниже пинг.
+            val realitySettings = JSONObject()
+                .put("serverName", sni)
+                .put("publicKey", publicKey)
+                .put("shortId", shortId)
+                .put("fingerprint", if (fingerprint.isNotEmpty()) fingerprint else "chrome")
+                .put("show", false)
+            stream = JSONObject()
+                .put("network", "tcp")
+                .put("security", "reality")
+                .put("realitySettings", realitySettings)
+                .put("sockopt", sockopt)
+        } else {
+            // CDN: VLESS + XHTTP + TLS через NGENIX.
+            // XHTTP (SplitHTTP) — устойчивее WS к буферизации/таймаутам CDN, HTTP/1.1.
+            // xmux: несколько параллельных XHTTP-соединений + keepalive → меньше
+            // head-of-line при потерях (всплески пинга) и обрывов длинных соединений.
+            val xmux = JSONObject()
+                .put("maxConcurrency", "16-32")
+                .put("maxConnections", 0)
+                .put("hMaxRequestTimes", "600-900")
+                .put("hKeepAlivePeriod", 30)
+            val xhttpSettings = JSONObject()
+                .put("path", wsPath)
+                .put("host", wsHost)
+                .put("mode", "auto")
+                .put("extra", JSONObject().put("xmux", xmux))
+            val tlsSettings = JSONObject()
+                .put("serverName", sni)
+                .put("allowInsecure", false)
+                .put("alpn", JSONArray(listOf("h2", "http/1.1")))
+            stream = JSONObject()
+                .put("network", "xhttp")
+                .put("security", "tls")
+                .put("xhttpSettings", xhttpSettings)
+                .put("tlsSettings", tlsSettings)
+                .put("sockopt", sockopt)
+        }
 
         val proxy = JSONObject()
             .put("tag", "proxy")

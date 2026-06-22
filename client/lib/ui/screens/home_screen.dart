@@ -128,6 +128,7 @@ class _ConnectionCard extends StatelessWidget {
               _stageLabel(vpn.stage),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
+            if (vpn.directOffered) _ModeToggle(vpn: vpn),
             if (vpn.error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8, left: 24, right: 24),
@@ -168,6 +169,51 @@ class _ConnectionCard extends StatelessWidget {
       case VpnStage.disconnected:
         return hasSub ? 'Нажмите для подключения' : 'Подписка неактивна';
     }
+  }
+}
+
+/// Выбор режима подключения у кнопки: «Через CDN» (обход блокировок, стабильно)
+/// или «Напрямую» (ниже пинг, IP может блокироваться). Менять только при
+/// выключенном VPN.
+class _ModeToggle extends StatelessWidget {
+  final VpnController vpn;
+  const _ModeToggle({required this.vpn});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = vpn.canEditTunnelSettings;
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ChoiceChip(
+                label: const Text('🛡 Через CDN'),
+                selected: !vpn.directMode,
+                onSelected: enabled ? (_) => vpn.setDirectMode(false) : null,
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('🚀 Напрямую'),
+                selected: vpn.directMode,
+                onSelected: enabled ? (_) => vpn.setDirectMode(true) : null,
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              vpn.directMode
+                  ? 'Ниже пинг, но IP может блокироваться'
+                  : 'Обход блокировок, стабильно',
+              style: const TextStyle(color: Color(0xFF8B98A5), fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

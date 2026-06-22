@@ -45,6 +45,30 @@ export class Node {
   @Column({ type: 'varchar', length: 128, default: '/ws' })
   wsPath: string;
 
+  // ── Прямой режим (мимо CDN): VLESS + XTLS-Vision + Reality ──
+  // Если directHost и directPublicKey заданы — клиенту выдаётся второй конфиг
+  // для прямого подключения (ниже пинг, но IP блокируем). Иначе — только CDN.
+
+  /** Адрес origin для прямого подключения клиента (IP или домен). */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  directHost: string | null;
+
+  /** Порт прямого режима (Reality-инбаунд). */
+  @Column({ type: 'int', default: 2053 })
+  directPort: number;
+
+  /** Публичный ключ Reality (pbk в ссылке). */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  directPublicKey: string | null;
+
+  /** shortId Reality (sid в ссылке). */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  directShortId: string | null;
+
+  /** SNI/serverName прямого режима (домен маскировки Reality). */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  directSni: string | null;
+
   /** URL API управления Xray на узле (добавление/удаление пользователей). */
   @Column({ type: 'varchar', length: 255, nullable: true })
   apiUrl: string | null;

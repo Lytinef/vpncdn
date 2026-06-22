@@ -43,6 +43,29 @@ export class CreateNodeDto {
   @IsString()
   apiSecret?: string;
 
+  // ── Прямой режим (мимо CDN), VLESS+Vision+Reality ──
+  @IsOptional()
+  @IsString()
+  directHost?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  directPort?: number;
+
+  @IsOptional()
+  @IsString()
+  directPublicKey?: string;
+
+  @IsOptional()
+  @IsString()
+  directShortId?: string;
+
+  @IsOptional()
+  @IsString()
+  directSni?: string;
+
   @IsOptional()
   @IsInt()
   @Min(1)

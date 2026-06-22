@@ -34,6 +34,10 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
   private readonly cfg: TelegramConfig;
   private bot: Bot | null = null;
 
+  /** Пользователи, включившие автопродление без карты — после привязки карты
+   *  автопродление включится автоматически (см. notifyPaymentSucceeded). */
+  private readonly pendingAutopay = new Set<string>();
+
   constructor(
     config: ConfigService,
     private readonly users: UsersService,
@@ -213,15 +217,31 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
 
   private async setAutopay(ctx: Context, on: boolean): Promise<void> {
     const userId = await this.getUserId(ctx);
-    const sub = on
-      ? await this.subs.resume(userId)
-      : await this.subs.cancelAtPeriodEnd(userId);
-    const text = on
-      ? `✅ Автопродление включено. Тариф «${sub.plan.name}» продлится автоматически.`
-      : `✅ Автопродление отключено. Доступ сохранится до <b>${ui.fmtDate(
+    if (!on) {
+      const sub = await this.subs.cancelAtPeriodEnd(userId);
+      await this.render(
+        ctx,
+        `✅ Автопродление отключено. Доступ сохранится до <b>${ui.fmtDate(
           sub.currentPeriodEnd,
-        )}</b>, дальше списаний не будет.`;
-    await this.render(ctx, text, ui.statusKeyboard(sub));
+        )}</b>, дальше списаний не будет.`,
+        ui.statusKeyboard(sub),
+      );
+      return;
+    }
+    // Включение автопродления требует привязанной карты. Нет карты —
+    // отправляем на привязку, автопродление включится после неё.
+    const card = await this.paymentMethods.getDefault(userId);
+    if (!card) {
+      this.pendingAutopay.add(userId);
+      await this.showBindCard(ctx, true);
+      return;
+    }
+    const sub = await this.subs.resume(userId);
+    await this.render(
+      ctx,
+      `✅ Автопродление включено. Тариф «${sub.plan.name}» продлится автоматически.`,
+      ui.statusKeyboard(sub),
+    );
   }
 
   private async showDevices(ctx: Context): Promise<void> {
@@ -245,7 +265,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     await this.render(ctx, ui.SUPPORT_TEXT, ui.backKeyboard());
   }
 
-  private async showBindCard(ctx: Context): Promise<void> {
+  private async showBindCard(ctx: Context, forAutopay = false): Promise<void> {
     const userId = await this.getUserId(ctx);
     const returnUrl = this.cfg.botUsername
       ? `https://t.me/${this.cfg.botUsername}`
@@ -258,9 +278,14 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       .url(`💳 Привязать карту (${checkout.amountRub} ₽)`, checkout.confirmationUrl)
       .row()
       .text('⬅️ В меню', 'menu:main');
+    const head = forAutopay
+      ? '💳 <b>Нужна привязанная карта</b>\n\n' +
+        'Для автопродления привяжите карту — после привязки автопродление ' +
+        'включится автоматически.\n\n'
+      : '💳 <b>Привязка карты</b>\n\n';
     await this.render(
       ctx,
-      '💳 <b>Привязка карты</b>\n\n' +
+      head +
         `Спишем <b>${checkout.amountRub} ₽</b> для привязки и сразу вернём. ` +
         'Новая карта заменит прежнюю — с неё будут идти автосписания.',
       kb,
@@ -308,12 +333,19 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       platform: DevicePlatform.IOS,
     });
     const conn = await this.devices.getConnection(userId, device.id);
+    const directBlock = conn.direct
+      ? '\n\n🚀 <b>Прямой</b> (быстрее, ниже пинг; если не работает — используйте «через CDN»):\n\n' +
+        `<code>${ui.escapeHtml(conn.direct.uri)}</code>`
+      : '';
     await this.render(
       ctx,
       '📲 <b>Конфиг готов</b>\n\n' +
-        'Импортируйте ссылку в клиент с поддержкой VLESS + XHTTP (Happ, v2RayTun, v2rayNG):\n\n' +
-        `<code>${ui.escapeHtml(conn.uri)}</code>\n\n` +
-        'Учитывается в лимите устройств — удалить можно в «📱 Мои устройства».',
+        'Импортируйте ссылку в клиент с поддержкой VLESS (Happ, v2RayTun, v2rayNG). ' +
+        'Обе ссылки — одно устройство тарифа.\n\n' +
+        '🛡 <b>Через CDN</b> (обход блокировок, стабильно):\n\n' +
+        `<code>${ui.escapeHtml(conn.cdn.uri)}</code>` +
+        directBlock +
+        '\n\nУчитывается в лимите устройств — удалить можно в «📱 Мои устройства».',
       ui.backKeyboard(),
     );
   }
@@ -340,6 +372,22 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       const user = await this.users.findById(ev.userId);
       if (!user) return;
       if (ev.purpose === PaymentPurpose.BIND_CARD) {
+        // Если карту привязывали ради автопродления — включаем его.
+        if (this.pendingAutopay.delete(ev.userId)) {
+          try {
+            const sub = await this.subs.resume(ev.userId);
+            await this.bot.api.sendMessage(
+              user.telegramId,
+              '✅ <b>Карта привязана, автопродление включено.</b>\n\n' +
+                `Тариф «${sub.plan.name}» продлится автоматически. ` +
+                'Списанная при привязке сумма вернётся.',
+              { parse_mode: 'HTML', reply_markup: ui.statusKeyboard(sub) },
+            );
+            return;
+          } catch (e) {
+            this.logger.warn(`Не удалось включить автопродление ${ev.userId}: ${String(e)}`);
+          }
+        }
         await this.bot.api.sendMessage(
           user.telegramId,
           '✅ <b>Карта привязана.</b> Списанная сумма вернётся; автосписания пойдут с новой карты.',

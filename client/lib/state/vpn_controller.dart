@@ -61,6 +61,16 @@ class VpnController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Прямой режим (мимо CDN). Менять только при выключенном VPN.
+  bool get directMode => _settings.directMode;
+  bool get directOffered => _settings.directOffered;
+
+  void setDirectMode(bool v) {
+    if (!canEditTunnelSettings) return;
+    _settings.directMode = v;
+    notifyListeners();
+  }
+
   void setSplitEnabled(bool v) {
     if (!canEditTunnelSettings) return;
     _settings.splitEnabled = v;
@@ -133,9 +143,13 @@ class VpnController extends ChangeNotifier {
   Future<TunnelConfig> _buildConfigOnline() async {
     final deviceId = await _ensureDevice();
     final connection = await _api.connection(deviceId);
+    // Запоминаем, доступен ли прямой режим (для тумблера), и кэшируем оба
+    // варианта — чтобы офлайн переключение тоже работало.
+    _settings.directOffered = connection.hasDirect;
+    _settings.cachedConnection = jsonEncode(connection.toMap());
     final bypass = await _loadBypass();
     return _composeConfig(
-      connection,
+      connection.select(_settings.directMode),
       bypass.apps.map((e) => e.value).toList(),
       bypass.domains.map((e) => e.value).toList(),
     );
@@ -158,7 +172,8 @@ class VpnController extends ChangeNotifier {
       );
 
   void _cacheConfig(TunnelConfig config) {
-    _settings.cachedConnection = jsonEncode(config.connection.toMap());
+    // Конфиг подключения кэшируется целиком (оба варианта) в _buildConfigOnline;
+    // здесь — только списки обхода.
     _settings.cachedBypassApps = config.bypassApps;
     _settings.cachedBypassDomains = config.bypassDomains;
   }
@@ -168,9 +183,9 @@ class VpnController extends ChangeNotifier {
     if (raw == null) return null;
     try {
       final connection =
-          VlessConnection.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+          DeviceConnection.fromJson(jsonDecode(raw) as Map<String, dynamic>);
       return _composeConfig(
-        connection,
+        connection.select(_settings.directMode),
         _settings.cachedBypassApps,
         _settings.cachedBypassDomains,
       );

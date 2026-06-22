@@ -147,44 +147,104 @@ class Device {
       );
 }
 
-/// Конфигурация VLESS-подключения для нативного ядра.
+/// Один вариант VLESS-подключения для нативного ядра.
+/// mode='cdn': XHTTP+TLS через NGENIX (обход блокировок).
+/// mode='direct': Vision+Reality мимо CDN (ниже пинг, IP блокируем).
 class VlessConnection {
+  final String mode;
   final String uuid;
   final String address;
   final int port;
   final String sni;
+  final String security; // 'tls' | 'reality'
+  final String network; // 'xhttp' | 'tcp'
   final String wsPath;
   final String wsHost;
+  final String flow;
+  final String publicKey;
+  final String shortId;
+  final String fingerprint;
   final String uri;
 
   VlessConnection({
+    required this.mode,
     required this.uuid,
     required this.address,
     required this.port,
     required this.sni,
+    required this.security,
+    required this.network,
     required this.wsPath,
     required this.wsHost,
+    required this.flow,
+    required this.publicKey,
+    required this.shortId,
+    required this.fingerprint,
     required this.uri,
   });
 
   factory VlessConnection.fromJson(Map<String, dynamic> j) => VlessConnection(
+        mode: j['mode'] ?? 'cdn',
         uuid: j['uuid'],
         address: j['address'],
         port: j['port'],
         sni: j['sni'],
-        wsPath: j['wsPath'],
-        wsHost: j['wsHost'],
+        security: j['security'] ?? 'tls',
+        network: j['network'] ?? 'xhttp',
+        wsPath: j['wsPath'] ?? '',
+        wsHost: j['wsHost'] ?? '',
+        flow: j['flow'] ?? '',
+        publicKey: j['publicKey'] ?? '',
+        shortId: j['shortId'] ?? '',
+        fingerprint: j['fingerprint'] ?? '',
         uri: j['uri'] ?? '',
       );
 
   Map<String, dynamic> toMap() => {
+        'mode': mode,
         'uuid': uuid,
         'address': address,
         'port': port,
         'sni': sni,
+        'security': security,
+        'network': network,
         'wsPath': wsPath,
         'wsHost': wsHost,
+        'flow': flow,
+        'publicKey': publicKey,
+        'shortId': shortId,
+        'fingerprint': fingerprint,
         'uri': uri,
+      };
+}
+
+/// Ответ сервера: два варианта подключения (CDN + опционально прямой).
+class DeviceConnection {
+  final VlessConnection cdn;
+  final VlessConnection? direct;
+
+  DeviceConnection({required this.cdn, this.direct});
+
+  bool get hasDirect => direct != null;
+
+  /// Вариант по флагу режима (если прямого нет — всегда CDN).
+  VlessConnection select(bool directMode) =>
+      (directMode && direct != null) ? direct! : cdn;
+
+  factory DeviceConnection.fromJson(Map<String, dynamic> j) {
+    // Новый формат: {cdn, direct}. Старый: плоские поля = CDN.
+    final cdn = j['cdn'] != null
+        ? VlessConnection.fromJson(j['cdn'] as Map<String, dynamic>)
+        : VlessConnection.fromJson(j);
+    final direct = j['direct'] != null
+        ? VlessConnection.fromJson(j['direct'] as Map<String, dynamic>)
+        : null;
+    return DeviceConnection(cdn: cdn, direct: direct);
+  }
+
+  Map<String, dynamic> toMap() => {
+        'cdn': cdn.toMap(),
+        if (direct != null) 'direct': direct!.toMap(),
       };
 }
 

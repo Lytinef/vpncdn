@@ -73,6 +73,8 @@ services:
     environment:
       AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
       INBOUND_TAG: vless-in
+      # Прямой режим (Reality). Без ключа reality-инбаунд не поднимается.
+      REALITY_PRIVATE_KEY: ${REALITY_PRIVATE_KEY:-}
     volumes:
       - ../xray/cert:/etc/xray/cert:ro
       - ../xray/data:/data
@@ -81,6 +83,8 @@ services:
     ports:
       # origin для NGENIX (TLS). Закрыть фаерволом для подсетей NGENIX.
       - "8443:8443"
+      # Прямой режим (VLESS+Vision+Reality), мимо CDN. Открыт всем клиентам.
+      - "2053:2053"
 
   caddy:
     image: caddy:2-alpine

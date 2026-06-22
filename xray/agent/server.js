@@ -28,6 +28,17 @@ const XRAY_BIN = process.env.XRAY_BIN || 'xray';
 const INBOUND_TAG = process.env.INBOUND_TAG || 'vless-in';
 const API_ADDR = process.env.XRAY_API_ADDR || '127.0.0.1:10085';
 
+// Прямой режим (мимо CDN): VLESS + XTLS-Vision + Reality. Ключ Reality — секрет,
+// в config.base.json его нет (плейсхолдер ""), подставляем из env. Если ключа нет —
+// reality-инбаунд удаляется из конфига, чтобы xray стартовал с одним CDN-инбаундом.
+const REALITY_INBOUND_TAG = process.env.REALITY_INBOUND_TAG || 'vless-reality';
+const REALITY_FLOW = 'xtls-rprx-vision';
+const REALITY_PRIVATE_KEY = process.env.REALITY_PRIVATE_KEY || '';
+
+// Инбаунды, в которые добавляется каждый клиент (заполняется в ensureGeneratedConfig).
+// CDN-инбаунд (xhttp) — без flow; reality — с flow=vision.
+let provisionTargets = [{ tag: INBOUND_TAG, flow: '' }];
+
 const PROTO_DIR = path.join(__dirname, 'proto');
 
 // ── proto: grpc-сервис + кодирование вложенных сообщений ──
@@ -86,6 +97,26 @@ function ensureGeneratedConfig() {
   const inbound = base.inbounds.find((i) => i.tag === INBOUND_TAG);
   if (!inbound) throw new Error(`inbound ${INBOUND_TAG} не найден в базовом конфиге`);
   inbound.settings.clients = [];
+
+  // Прямой режим (Reality): подставляем приватный ключ из env. Без ключа —
+  // удаляем инбаунд (xray не стартует с пустым privateKey).
+  const reality = base.inbounds.find((i) => i.tag === REALITY_INBOUND_TAG);
+  if (reality) {
+    if (REALITY_PRIVATE_KEY) {
+      reality.settings.clients = [];
+      reality.streamSettings.realitySettings.privateKey = REALITY_PRIVATE_KEY;
+      provisionTargets = [
+        { tag: INBOUND_TAG, flow: '' },
+        { tag: REALITY_INBOUND_TAG, flow: REALITY_FLOW },
+      ];
+      console.log('[agent] reality-инбаунд активен (прямой режим)');
+    } else {
+      base.inbounds = base.inbounds.filter((i) => i.tag !== REALITY_INBOUND_TAG);
+      provisionTargets = [{ tag: INBOUND_TAG, flow: '' }];
+      console.warn('[agent] REALITY_PRIVATE_KEY не задан — reality-инбаунд отключён');
+    }
+  }
+
   fs.writeFileSync(GENERATED, JSON.stringify(base, null, 2));
 }
 
@@ -160,39 +191,45 @@ async function systemMetrics() {
   return { cpuPercent, memPercent, cores: os.cpus().length || 1, clients: clients.length };
 }
 
-function alterInbound(operationTypedMessage) {
+function alterInbound(tag, operationTypedMessage) {
   return new Promise((resolve, reject) => {
     getApiClient().AlterInbound(
-      { tag: INBOUND_TAG, operation: operationTypedMessage },
+      { tag, operation: operationTypedMessage },
       (err, resp) => (err ? reject(err) : resolve(resp)),
     );
   });
 }
 
 async function addUser(uuid, email) {
-  const accountBytes = Account.encode(
-    Account.create({ id: uuid, flow: '', encryption: 'none' }),
-  ).finish();
-  const opBytes = AddUserOperation.encode(
-    AddUserOperation.create({
-      user: { level: 0, email, account: { type: T_VLESS, value: accountBytes } },
-    }),
-  ).finish();
-  try {
-    await alterInbound({ type: T_ADD, value: opBytes });
-  } catch (e) {
-    if (/already exists|exists/i.test(e.message || '')) return; // идемпотентно
-    throw e;
+  // Один UUID добавляется во все активные инбаунды (CDN + reality) — два конфига,
+  // одно устройство. flow зависит от инбаунда (vision только для reality).
+  for (const target of provisionTargets) {
+    const accountBytes = Account.encode(
+      Account.create({ id: uuid, flow: target.flow, encryption: 'none' }),
+    ).finish();
+    const opBytes = AddUserOperation.encode(
+      AddUserOperation.create({
+        user: { level: 0, email, account: { type: T_VLESS, value: accountBytes } },
+      }),
+    ).finish();
+    try {
+      await alterInbound(target.tag, { type: T_ADD, value: opBytes });
+    } catch (e) {
+      if (/already exists|exists/i.test(e.message || '')) continue; // идемпотентно
+      throw e;
+    }
   }
 }
 
 async function removeUser(email) {
-  const opBytes = RemoveUserOperation.encode(RemoveUserOperation.create({ email })).finish();
-  try {
-    await alterInbound({ type: T_REMOVE, value: opBytes });
-  } catch (e) {
-    if (/not found|does not exist|doesn't exist/i.test(e.message || '')) return;
-    throw e;
+  for (const target of provisionTargets) {
+    const opBytes = RemoveUserOperation.encode(RemoveUserOperation.create({ email })).finish();
+    try {
+      await alterInbound(target.tag, { type: T_REMOVE, value: opBytes });
+    } catch (e) {
+      if (/not found|does not exist|doesn't exist/i.test(e.message || '')) continue;
+      throw e;
+    }
   }
 }
 

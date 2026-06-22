@@ -64,8 +64,8 @@ class Api {
 
   Future<void> removeDevice(String id) => _c.delete('/devices/$id');
 
-  Future<VlessConnection> connection(String deviceId) async =>
-      VlessConnection.fromJson(await _c.get('/devices/$deviceId/connection'));
+  Future<DeviceConnection> connection(String deviceId) async =>
+      DeviceConnection.fromJson(await _c.get('/devices/$deviceId/connection'));
 
   // ── список обхода ──
   Future<BypassList> bypass() async => BypassList.fromJson(await _c.get('/bypass'));

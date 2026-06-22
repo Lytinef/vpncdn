@@ -106,10 +106,16 @@ class VpnConnectionService : VpnService() {
             address = conn.getString("address"),
             port = conn.getInt("port"),
             sni = conn.getString("sni"),
-            wsPath = conn.getString("wsPath"),
-            wsHost = conn.getString("wsHost"),
+            wsPath = conn.optString("wsPath", ""),
+            wsHost = conn.optString("wsHost", ""),
             bypassEnabled = cfg.optBoolean("bypassEnabled", true),
             bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
+            security = conn.optString("security", "tls"),
+            network = conn.optString("network", "xhttp"),
+            flow = conn.optString("flow", ""),
+            publicKey = conn.optString("publicKey", ""),
+            shortId = conn.optString("shortId", ""),
+            fingerprint = conn.optString("fingerprint", "chrome"),
         )
         xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
         tun2socks = Tun2socks().also { it.start(filesDir, tun!!.fd, SOCKS_PORT, MTU, DNS) }

@@ -5,6 +5,8 @@ class SettingsStore {
   static const _kKillSwitch = 'kill_switch';
   static const _kAutoStart = 'auto_start';
   static const _kBypassEnabled = 'bypass_enabled';
+  static const _kDirectMode = 'direct_mode';
+  static const _kDirectOffered = 'direct_offered';
   static const _kSplitEnabled = 'split_enabled';
   static const _kSplitMode = 'split_mode'; // 'off' | 'include' | 'exclude'
   static const _kSplitApps = 'split_apps';
@@ -29,6 +31,16 @@ class SettingsStore {
   /// Обход блокировок VPN: РФ-сервисы идут мимо туннеля.
   bool get bypassEnabled => _p.getBool(_kBypassEnabled) ?? true;
   set bypassEnabled(bool v) => _p.setBool(_kBypassEnabled, v);
+
+  /// Прямой режим (мимо CDN): ниже пинг, но IP может блокироваться.
+  /// По умолчанию выкл — стабильный CDN.
+  bool get directMode => _p.getBool(_kDirectMode) ?? false;
+  set directMode(bool v) => _p.setBool(_kDirectMode, v);
+
+  /// Предлагает ли сервер прямой режим (узнаём после запроса конфига) —
+  /// от этого зависит показ тумблера.
+  bool get directOffered => _p.getBool(_kDirectOffered) ?? false;
+  set directOffered(bool v) => _p.setBool(_kDirectOffered, v);
 
   /// Раздельное туннелирование включено.
   bool get splitEnabled => _p.getBool(_kSplitEnabled) ?? false;

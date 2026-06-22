@@ -396,35 +396,58 @@ class WindowsVpnEngine implements VpnEngine {
                 'address': serverAddress,
                 'port': c.port,
                 'users': [
-                  {'id': c.uuid, 'encryption': 'none'},
+                  {
+                    'id': c.uuid,
+                    'encryption': 'none',
+                    // flow (vision) только в прямом режиме (reality).
+                    if (c.security == 'reality' && c.flow.isNotEmpty)
+                      'flow': c.flow,
+                  },
                 ],
               },
             ],
           },
-          'streamSettings': {
-            'network': 'xhttp',
-            'security': 'tls',
-            'tlsSettings': {
-              'serverName': c.sni,
-              'alpn': ['h2', 'http/1.1'],
-            },
-            'xhttpSettings': {
-              'path': c.wsPath,
-              'host': c.wsHost,
-              'mode': 'auto',
-              // xmux: параллельные соединения + keepalive — меньше head-of-line при
-              // потерях (всплески пинга) и обрывов простаивающих долгих соединений.
-              'extra': {
-                'xmux': {
-                  'maxConcurrency': '16-32',
-                  'maxConnections': 0,
-                  'hMaxRequestTimes': '600-900',
-                  'hKeepAlivePeriod': 30,
+          'streamSettings': c.security == 'reality'
+              // Прямой режим (мимо CDN): VLESS + XTLS-Vision + Reality.
+              // Маскировка под настоящий TLS-сайт, минимум оверхеда → ниже пинг.
+              ? {
+                  'network': 'tcp',
+                  'security': 'reality',
+                  'realitySettings': {
+                    'serverName': c.sni,
+                    'publicKey': c.publicKey,
+                    'shortId': c.shortId,
+                    'fingerprint':
+                        c.fingerprint.isNotEmpty ? c.fingerprint : 'chrome',
+                    'show': false,
+                  },
+                  'sockopt': {'tcpKeepAliveIdle': 30, 'tcpKeepAliveInterval': 15},
+                }
+              // CDN: VLESS + XHTTP + TLS через NGENIX.
+              : {
+                  'network': 'xhttp',
+                  'security': 'tls',
+                  'tlsSettings': {
+                    'serverName': c.sni,
+                    'alpn': ['h2', 'http/1.1'],
+                  },
+                  'xhttpSettings': {
+                    'path': c.wsPath,
+                    'host': c.wsHost,
+                    'mode': 'auto',
+                    // xmux: параллельные соединения + keepalive — меньше head-of-line
+                    // при потерях (всплески пинга) и обрывов длинных соединений.
+                    'extra': {
+                      'xmux': {
+                        'maxConcurrency': '16-32',
+                        'maxConnections': 0,
+                        'hMaxRequestTimes': '600-900',
+                        'hKeepAlivePeriod': 30,
+                      },
+                    },
+                  },
+                  'sockopt': {'tcpKeepAliveIdle': 30, 'tcpKeepAliveInterval': 15},
                 },
-              },
-            },
-            'sockopt': {'tcpKeepAliveIdle': 30, 'tcpKeepAliveInterval': 15},
-          },
         },
         {'tag': 'direct', 'protocol': 'freedom'},
         {'tag': 'block', 'protocol': 'blackhole'},
