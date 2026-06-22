@@ -58,10 +58,19 @@ object XrayConfigBuilder {
             .put("alpn", JSONArray(listOf("h2", "http/1.1")))
         // XHTTP (SplitHTTP) — современный CDN-транспорт: устойчивее WS к буферизации/
         // таймаутам CDN, работает по HTTP/1.1. mode=auto сам подбирает режим.
+        // xmux: несколько параллельных XHTTP-соединений + keepalive. Меньше
+        // head-of-line при потерях (всплески пинга) и обрывов простаивающих долгих
+        // соединений (CDN закрывает длинный запрос). Клиентский параметр.
+        val xmux = JSONObject()
+            .put("maxConcurrency", "16-32")
+            .put("maxConnections", 0)
+            .put("hMaxRequestTimes", "600-900")
+            .put("hKeepAlivePeriod", 30)
         val xhttpSettings = JSONObject()
             .put("path", wsPath)
             .put("host", wsHost)
             .put("mode", "auto")
+            .put("extra", JSONObject().put("xmux", xmux))
         // TCP keepalive: пробы только при простое соединения, на throughput не влияют.
         val sockopt = JSONObject()
             .put("tcpKeepAliveIdle", 30)

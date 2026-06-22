@@ -408,7 +408,21 @@ class WindowsVpnEngine implements VpnEngine {
               'serverName': c.sni,
               'alpn': ['h2', 'http/1.1'],
             },
-            'xhttpSettings': {'path': c.wsPath, 'host': c.wsHost, 'mode': 'auto'},
+            'xhttpSettings': {
+              'path': c.wsPath,
+              'host': c.wsHost,
+              'mode': 'auto',
+              // xmux: параллельные соединения + keepalive — меньше head-of-line при
+              // потерях (всплески пинга) и обрывов простаивающих долгих соединений.
+              'extra': {
+                'xmux': {
+                  'maxConcurrency': '16-32',
+                  'maxConnections': 0,
+                  'hMaxRequestTimes': '600-900',
+                  'hKeepAlivePeriod': 30,
+                },
+              },
+            },
             'sockopt': {'tcpKeepAliveIdle': 30, 'tcpKeepAliveInterval': 15},
           },
         },

@@ -48,11 +48,24 @@ export class XrayService {
   /** Собирает конфигурацию подключения для клиента. */
   buildConnection(node: Node, device: Device): VlessConnection {
     // Транспорт — XHTTP (как на origin за NGENIX); ws-ссылка не подключится.
+    // xmux в ссылке — чтобы happ/v2rayng (iPhone) тоже использовали несколько
+    // параллельных соединений (меньше всплесков пинга/обрывов). Клиенты без
+    // поддержки extra просто игнорируют параметр.
+    const xmuxExtra = encodeURIComponent(
+      JSON.stringify({
+        xmux: {
+          maxConcurrency: '16-32',
+          maxConnections: 0,
+          hMaxRequestTimes: '600-900',
+          hKeepAlivePeriod: 30,
+        },
+      }),
+    );
     const uri =
       `vless://${device.xrayUuid}@${node.cdnDomain}:${node.port}` +
       `?encryption=none&security=tls&sni=${encodeURIComponent(node.sni)}` +
       `&type=xhttp&host=${encodeURIComponent(node.cdnDomain)}` +
-      `&path=${encodeURIComponent(node.wsPath)}&mode=auto` +
+      `&path=${encodeURIComponent(node.wsPath)}&mode=auto&extra=${xmuxExtra}` +
       `#${encodeURIComponent(node.name)}`;
 
     return {
