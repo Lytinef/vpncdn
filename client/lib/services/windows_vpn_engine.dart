@@ -117,7 +117,8 @@ class WindowsVpnEngine implements VpnEngine {
       _tun2socks = await Process.start(
         '$_binDir\\tun2socks.exe',
         // MTU 1280: меньше фрагментации сквозь XHTTP/TLS/CDN (скорость/рывки/пинг).
-        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-mtu', '1280', '-loglevel', 'warn'],
+        // -tcp-auto-tuning: авто-подбор буферов netstack (throughput).
+        ['-device', 'wintun', '-proxy', 'socks5://127.0.0.1:$_socksPort', '-mtu', '1280', '-tcp-auto-tuning', '-loglevel', 'warn'],
         workingDirectory: _binDir,
       );
       _pipe(_tun2socks!, 'tun2socks');
@@ -208,6 +209,11 @@ class WindowsVpnEngine implements VpnEngine {
     // Перекрываем дефолт двумя /1-маршрутами через туннель (не трогая исходный default).
     await _run('route', ['add', '0.0.0.0', 'mask', '128.0.0.0', _tunAddr, 'metric', '1', 'if', '$_tunIfIndex']);
     await _run('route', ['add', '128.0.0.0', 'mask', '128.0.0.0', _tunAddr, 'metric', '1', 'if', '$_tunIfIndex']);
+
+    // Расширяем диапазон эфемерных портов: tun2socks открывает соединение к SOCKS
+    // на каждый поток → дефолтных ~16k под нагрузкой не хватает ("Only one usage of
+    // each socket address"), и трафик начинает обрываться.
+    await _run('netsh', ['int', 'ipv4', 'set', 'dynamicport', 'tcp', 'start=10000', 'num=55535']);
   }
 
   Future<void> _teardown() async {
@@ -250,15 +256,14 @@ class WindowsVpnEngine implements VpnEngine {
   /// раньше давал многосекундную задержку на коннекте — отсюда «долгое
   /// подключение»). Читаем реальный HTTP-ответ — значит туннель достаёт сквозь.
   Future<int> _measure() async {
-    const host = 'cp.cloudflare.com';
+    // Фиксированный IP БЕЗ DNS: сразу после смены маршрутов системный резолвер ещё
+    // не готов (errno 11004 / таймауты) и давал ~30с задержку коннекта. 1.1.1.1:80
+    // отвечает HTTP-редиректом — значит туннель достаёт сквозь.
     final sw = Stopwatch()..start();
     Socket? sock;
     try {
-      final ips = await InternetAddress.lookup(host, type: InternetAddressType.IPv4)
-          .timeout(const Duration(seconds: 5));
-      if (ips.isEmpty) return -1;
-      sock = await Socket.connect(ips.first, 80, timeout: const Duration(seconds: 5));
-      sock.write('GET /generate_204 HTTP/1.1\r\nHost: $host\r\nConnection: close\r\n\r\n');
+      sock = await Socket.connect('1.1.1.1', 80, timeout: const Duration(seconds: 5));
+      sock.write('GET / HTTP/1.1\r\nHost: 1.1.1.1\r\nConnection: close\r\n\r\n');
       await sock.flush();
       final resp = await sock
           .cast<List<int>>()
