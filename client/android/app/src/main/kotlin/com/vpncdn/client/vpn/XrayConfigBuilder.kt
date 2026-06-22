@@ -113,7 +113,15 @@ object XrayConfigBuilder {
             .put("settings", proxySettings)
             .put("streamSettings", stream)
 
-        val direct = JSONObject().put("tag", "direct").put("protocol", "freedom")
+        // direct: freedom с domainStrategy=UseIP — после sniffing назначение
+        // подменяется на домен, и freedom САМ резолвит его через прямой резолвер
+        // приложения (приложение исключено из VPN). Иначе для обходимого домена
+        // использовался бы IP, отрезолвленный через туннель (гео сервера) — сайт
+        // открывался бы «как через VPN». Это чинит обход доменов на Android.
+        val direct = JSONObject()
+            .put("tag", "direct")
+            .put("protocol", "freedom")
+            .put("settings", JSONObject().put("domainStrategy", "UseIP"))
         val block = JSONObject().put("tag", "block").put("protocol", "blackhole")
         root.put("outbounds", JSONArray().put(proxy).put(direct).put(block))
 
