@@ -271,12 +271,11 @@ class WindowsVpnEngine implements VpnEngine {
       sock = await Socket.connect('1.1.1.1', 80, timeout: const Duration(seconds: 5));
       sock.write('GET / HTTP/1.1\r\nHost: 1.1.1.1\r\nConnection: close\r\n\r\n');
       await sock.flush();
-      final resp = await sock
-          .cast<List<int>>()
-          .transform(const Utf8Decoder(allowMalformed: true))
-          .join()
-          .timeout(const Duration(seconds: 5));
-      return resp.startsWith('HTTP/') ? sw.elapsedMilliseconds : -1;
+      // Время до ПЕРВОГО байта ответа (а не до полного чтения и закрытия — это
+      // добавляло лишний RTT и завышало «пинг»).
+      final firstChunk =
+          await sock.cast<List<int>>().first.timeout(const Duration(seconds: 5));
+      return firstChunk.isNotEmpty ? sw.elapsedMilliseconds : -1;
     } catch (e) {
       _logLine('probe error: $e');
       return -1;
