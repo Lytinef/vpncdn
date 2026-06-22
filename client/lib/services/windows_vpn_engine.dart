@@ -327,12 +327,20 @@ class WindowsVpnEngine implements VpnEngine {
         'outboundTag': 'direct',
       },
     ];
-    if (config.bypassEnabled && config.bypassDomains.isNotEmpty) {
-      rules.add({
-        'type': 'field',
-        'domain': config.bypassDomains,
-        'outboundTag': 'direct',
-      });
+    if (config.bypassEnabled) {
+      // Xray-роутер ПАНИКУЕТ на не-ASCII (IDN) доменах вроде "честныйзнак.рф"
+      // (нужен punycode) → ядро падало, SOCKS не поднимался. Фильтруем не-ASCII и
+      // пустые (IDN-домены обхода — редкость).
+      final domains = config.bypassDomains
+          .where((d) => d.trim().isNotEmpty && d.runes.every((r) => r < 128))
+          .toList();
+      if (domains.isNotEmpty) {
+        rules.add({
+          'type': 'field',
+          'domain': domains,
+          'outboundTag': 'direct',
+        });
+      }
     }
     final cfg = {
       'log': {'loglevel': 'warning'},

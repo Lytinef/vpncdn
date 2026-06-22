@@ -106,9 +106,12 @@ object XrayConfigBuilder {
                 .put("outboundTag", "direct"),
         )
         // Обход блокировок: РФ-домены идут мимо туннеля.
-        if (bypassEnabled && bypassDomains.isNotEmpty()) {
+        // Не-ASCII (IDN) домены вроде "честныйзнак.рф" роняют xray-роутер (нужен
+        // punycode) — фильтруем; пустые тоже.
+        val asciiBypass = bypassDomains.filter { it.isNotBlank() && it.all { ch -> ch.code < 128 } }
+        if (bypassEnabled && asciiBypass.isNotEmpty()) {
             val domains = JSONArray()
-            bypassDomains.forEach { domains.put("domain:$it") }
+            asciiBypass.forEach { domains.put("domain:$it") }
             rules.put(
                 JSONObject()
                     .put("type", "field")
