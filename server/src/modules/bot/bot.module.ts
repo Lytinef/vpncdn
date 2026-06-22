@@ -13,5 +13,6 @@ import { BotService } from './bot.service';
 @Module({
   imports: [UsersModule, SubscriptionsModule, PaymentsModule, DevicesModule, AuthModule],
   providers: [BotService],
+  exports: [BotService],
 })
 export class BotModule {}

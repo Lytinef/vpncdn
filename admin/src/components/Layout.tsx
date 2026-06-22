@@ -9,6 +9,7 @@ const links = [
   { to: '/nodes', label: 'Узлы' },
   { to: '/bypass', label: 'Обход VPN' },
   { to: '/versions', label: 'Версии' },
+  { to: '/broadcast', label: 'Рассылка' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {

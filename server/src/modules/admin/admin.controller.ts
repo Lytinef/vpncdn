@@ -20,11 +20,13 @@ import { PaymentStatus } from '../payments/entities/payment.entity';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { serializeSubscription } from '../subscriptions/subscriptions.serializer';
 import { DevicesService } from '../devices/devices.service';
+import { BotService } from '../bot/bot.service';
 import {
   AdminGrantSubscriptionDto,
   AdminExtendDto,
   AdminChangePlanDto,
 } from './dto/subscription.dto';
+import { AdminBroadcastDto } from './dto/broadcast.dto';
 
 @ApiTags('admin')
 @Controller('admin')
@@ -34,7 +36,16 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly subscriptions: SubscriptionsService,
     private readonly devices: DevicesService,
+    private readonly bot: BotService,
   ) {}
+
+  /** Массовая рассылка всем пользователям бота. */
+  @Post('broadcast')
+  @ApiBearerAuth()
+  @UseGuards(AdminJwtGuard)
+  broadcast(@Body() dto: AdminBroadcastDto) {
+    return this.bot.broadcast(dto.text);
+  }
 
   @Post('auth/login')
   @HttpCode(HttpStatus.OK)

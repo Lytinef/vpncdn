@@ -190,7 +190,7 @@ class _ModeToggle extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               ChoiceChip(
-                label: const Text('🛡 Через CDN'),
+                label: const Text('🛡 Обход'),
                 selected: !vpn.directMode,
                 onSelected: enabled ? (_) => vpn.setDirectMode(false) : null,
               ),

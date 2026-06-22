@@ -86,6 +86,24 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     bot.command('menu', (ctx) => this.guard(ctx, () => this.showMenu(ctx)));
 
     bot.callbackQuery('menu:main', (ctx) => this.guard(ctx, () => this.showMenu(ctx)));
+    bot.callbackQuery('menu:cat:connect', (ctx) =>
+      this.guard(ctx, () =>
+        this.render(
+          ctx,
+          '🔌 <b>Подключение</b>\n\nКонфиг для приложений, вход в приложение Unway и ваши устройства.',
+          ui.connectMenuKeyboard(),
+        ),
+      ),
+    );
+    bot.callbackQuery('menu:cat:billing', (ctx) =>
+      this.guard(ctx, () =>
+        this.render(
+          ctx,
+          '💳 <b>Подписка и оплата</b>\n\nСтатус подписки, тарифы, смена тарифа и привязка карты.',
+          ui.billingMenuKeyboard(),
+        ),
+      ),
+    );
     bot.callbackQuery('menu:status', (ctx) => this.guard(ctx, () => this.showStatus(ctx)));
     bot.callbackQuery('menu:login', (ctx) => this.guard(ctx, () => this.showLoginCode(ctx)));
     bot.callbackQuery('menu:config', (ctx) => this.guard(ctx, () => this.showConfigConfirm(ctx)));
@@ -405,6 +423,33 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     } catch (e) {
       this.logger.warn(`Не удалось уведомить об оплате ${ev.userId}: ${String(e)}`);
     }
+  }
+
+  // ── Массовая рассылка ────────────────────────────────────
+
+  /** Отправляет сообщение всем незаблокированным пользователям (для админки). */
+  async broadcast(
+    text: string,
+  ): Promise<{ total: number; sent: number; failed: number }> {
+    if (!this.bot) throw new Error('Бот не запущен');
+    const recipients = await this.users.listTelegramRecipients();
+    let sent = 0;
+    let failed = 0;
+    for (const tgId of recipients) {
+      try {
+        await this.bot.api.sendMessage(tgId, text, { parse_mode: 'HTML' });
+        sent++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(`Рассылка → ${tgId} не доставлено: ${String(e)}`);
+      }
+      // Лимит Telegram ~30 сообщений/сек — держим ~20/сек во избежание 429.
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    this.logger.log(
+      `Рассылка завершена: отправлено ${sent}/${recipients.length}, ошибок ${failed}`,
+    );
+    return { total: recipients.length, sent, failed };
   }
 
   // ── Вспомогательное ──────────────────────────────────────

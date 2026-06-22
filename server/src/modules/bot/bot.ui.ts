@@ -56,13 +56,30 @@ const isTrial = (sub: Subscription | null): boolean =>
 
 // ── Клавиатуры ─────────────────────────────────────────────
 
+// Главное меню — категории, чтобы не было простыни кнопок.
 export const mainMenuKeyboard = (): InlineKeyboard =>
   new InlineKeyboard()
-    .text('📊 Моя подписка', 'menu:status')
+    .text('🔌 Подключение', 'menu:cat:connect')
+    .row()
+    .text('💳 Подписка и оплата', 'menu:cat:billing')
+    .row()
+    .text('🆘 Помощь', 'menu:support');
+
+// Категория «Подключение»: получить конфиг, вход в приложение, устройства.
+export const connectMenuKeyboard = (): InlineKeyboard =>
+  new InlineKeyboard()
+    .text('📲 Получить конфиг', 'menu:config')
     .row()
     .text('🔐 Войти в приложение', 'menu:login')
     .row()
-    .text('📲 Получить конфиг', 'menu:config')
+    .text('📱 Мои устройства', 'menu:devices')
+    .row()
+    .text('⬅️ В меню', 'menu:main');
+
+// Категория «Подписка и оплата».
+export const billingMenuKeyboard = (): InlineKeyboard =>
+  new InlineKeyboard()
+    .text('📊 Моя подписка', 'menu:status')
     .row()
     .text('💳 Тарифы и оплата', 'menu:plans')
     .row()
@@ -70,9 +87,7 @@ export const mainMenuKeyboard = (): InlineKeyboard =>
     .row()
     .text('💳 Привязать карту', 'menu:bindcard')
     .row()
-    .text('📱 Мои устройства', 'menu:devices')
-    .row()
-    .text('🆘 Поддержка', 'menu:support');
+    .text('⬅️ В меню', 'menu:main');
 
 export const backKeyboard = (): InlineKeyboard =>
   new InlineKeyboard().text('⬅️ В меню', 'menu:main');

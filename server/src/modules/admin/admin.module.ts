@@ -14,6 +14,7 @@ import { BypassModule } from '../bypass/bypass.module';
 import { AccountModule } from '../account/account.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { DevicesModule } from '../devices/devices.module';
+import { BotModule } from '../bot/bot.module';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminService } from './admin.service';
 import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
@@ -32,6 +33,7 @@ import { AdminBypassController } from './admin-bypass.controller';
     AccountModule,
     SubscriptionsModule,
     DevicesModule,
+    BotModule,
   ],
   providers: [AdminAuthService, AdminService, AdminJwtStrategy],
   controllers: [AdminController, AdminNodesController, AdminBypassController],

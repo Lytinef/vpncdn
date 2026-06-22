@@ -57,6 +57,15 @@ export class UsersService {
     await this.repo.update(id, { isBlocked });
   }
 
+  /** Telegram ID всех незаблокированных пользователей — для рассылки. */
+  async listTelegramRecipients(): Promise<string[]> {
+    const rows = await this.repo.find({
+      where: { isBlocked: false },
+      select: { telegramId: true },
+    });
+    return rows.map((u) => u.telegramId).filter((id): id is string => !!id);
+  }
+
   async touch(id: string): Promise<void> {
     await this.repo.update(id, { updatedAt: new Date() });
   }
