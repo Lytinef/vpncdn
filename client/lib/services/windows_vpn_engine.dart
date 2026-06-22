@@ -246,13 +246,14 @@ class WindowsVpnEngine implements VpnEngine {
   /// несколько секунд, чтобы «подняться» — первая попытка часто падает мгновенно
   /// («сеть недоступна»), поэтому пробуем несколько раз.
   Future<bool> _probe() async {
-    for (var i = 0; i < 8; i++) {
+    // Частые короткие попытки: ловим момент готовности туннеля без лишнего ожидания.
+    for (var i = 0; i < 25; i++) {
       final ms = await _measure();
       if (ms >= 0) {
         _logLine('probe ok: ${ms}ms (попытка ${i + 1})');
         return true;
       }
-      await Future.delayed(const Duration(milliseconds: 1200));
+      await Future.delayed(const Duration(milliseconds: 400));
     }
     return false;
   }
