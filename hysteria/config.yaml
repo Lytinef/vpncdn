@@ -5,9 +5,13 @@
 # отдельного провижининга не нужно: один UUID авторизует и xray, и hysteria2.
 listen: :443
 
+# Настоящий LE-серт api.lytinef.ru (его уже выпускает Caddy) — клиенты проверяют
+# цепочку штатно, без insecure/pin (happ/Hiddify/v2rayng-hysteria принимают).
+# Том caddy примонтирован read-only (см. docker-compose). Caddy продлевает серт в
+# тот же файл; при продлении перезапустить hysteria (или hot-reload, если есть).
 tls:
-  cert: /etc/hysteria/cert.pem
-  key: /etc/hysteria/key.pem
+  cert: /caddy-data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/api.lytinef.ru/api.lytinef.ru.crt
+  key: /caddy-data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/api.lytinef.ru/api.lytinef.ru.key
 
 auth:
   type: http

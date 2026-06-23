@@ -95,9 +95,10 @@ object XrayConfigBuilder {
                 .put("host", wsHost)
                 .put("mode", "auto")
                 .put("extra", JSONObject().put("xmux", xmux))
+            // allowInsecure удалён в xray-core 26.x; по умолчанию сертификат и так
+            // проверяется (CDN/NGENIX — валидный LE-серт), поле не нужно.
             val tlsSettings = JSONObject()
                 .put("serverName", sni)
-                .put("allowInsecure", false)
                 .put("alpn", JSONArray(listOf("h2", "http/1.1")))
             stream = JSONObject()
                 .put("network", "xhttp")

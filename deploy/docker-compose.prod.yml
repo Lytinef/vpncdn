@@ -98,8 +98,11 @@ services:
     command: ["server", "-c", "/etc/hysteria/config.yaml"]
     depends_on:
       - xray-node
+      - caddy
     volumes:
       - ../hysteria:/etc/hysteria
+      # LE-серт api.lytinef.ru от Caddy (read-only) — hysteria использует его как TLS.
+      - ./data/caddy:/caddy-data:ro
     ports:
       - "443:443/udp"
 

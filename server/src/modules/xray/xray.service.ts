@@ -161,16 +161,21 @@ export class XrayService {
     return this.buildHysteria2Variant(node, device);
   }
 
-  /** Прямой через Hysteria2 (UDP/QUIC). Пароль = uuid; self-signed + pinSHA256. */
+  /** Прямой через Hysteria2 (UDP/QUIC). Пароль = uuid.
+   *  Сервер на настоящем LE-серте (api.lytinef.ru) → insecure/pin не нужны,
+   *  конфиг принимают все клиенты (happ/Hiddify/NekoBox). Если у узла задан
+   *  directCertPin — режим self-signed (insecure+pin) для совместимости. */
   private buildHysteria2Variant(node: Node, device: Device): ConnectionVariant | null {
-    const certPin = node.directCertPin;
-    if (!certPin) return null; // без пина небезопасно — не выдаём
     const sni = node.directSni || 'api.lytinef.ru';
-    const uri =
+    const certPin = node.directCertPin || '';
+    const selfSigned = certPin.length > 0;
+    let uri =
       `hysteria2://${encodeURIComponent(device.xrayUuid)}@${node.directHost}:${node.directPort}` +
-      `?sni=${encodeURIComponent(sni)}&insecure=1` +
-      `&pinSHA256=${encodeURIComponent(certPin)}` +
-      `#${encodeURIComponent(node.name + ' • Direct')}`;
+      `?sni=${encodeURIComponent(sni)}`;
+    if (selfSigned) {
+      uri += `&insecure=1&pinSHA256=${encodeURIComponent(certPin)}`;
+    }
+    uri += `#${encodeURIComponent(node.name + ' • Direct')}`;
 
     return {
       mode: 'direct',
@@ -190,7 +195,7 @@ export class XrayService {
       fingerprint: '',
       auth: device.xrayUuid,
       certPin,
-      insecure: true,
+      insecure: selfSigned,
       uri,
     };
   }
