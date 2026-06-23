@@ -109,9 +109,18 @@ app.get('/awg/info', (_req, res) =>
 );
 
 app.post('/awg/peers', (req, res) => {
-  const { publicKey } = req.body || {};
-  if (!publicKey) return res.status(400).json({ error: 'publicKey required' });
   try {
+    let { publicKey } = req.body || {};
+    // Если pubkey не передан — генерим пару на сервере (для бота/внешних
+    // клиентов, где приватный ключ кладётся в выдаваемый конфиг). Нативный
+    // клиент присылает свой publicKey (приватный не покидает устройство).
+    let generatedPrivate = null;
+    if (!publicKey) {
+      generatedPrivate = execFileSync('awg', ['genkey']).toString().trim();
+      publicKey = execFileSync('awg', ['pubkey'], { input: generatedPrivate + '\n' })
+        .toString()
+        .trim();
+    }
     let peer = peers.find((p) => p.publicKey === publicKey);
     if (!peer) {
       peer = { publicKey, ip: allocateIp() };
@@ -121,9 +130,11 @@ app.post('/awg/peers', (req, res) => {
     awgAddPeer(peer.publicKey, peer.ip); // идемпотентно
     res.json({
       address: peer.ip,
+      publicKey,
       serverPublicKey,
       listenPort: LISTEN_PORT,
       params: PARAMS,
+      ...(generatedPrivate ? { privateKey: generatedPrivate } : {}),
     });
   } catch (e) {
     res.status(502).json({ error: e.message });
