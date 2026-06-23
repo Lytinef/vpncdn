@@ -51,6 +51,14 @@ android {
         getByName("stub") { java.srcDir("src/stub/kotlin") }
         getByName("full") { java.srcDir("src/full/kotlin") }
     }
+
+    // Распаковывать нативные .so на диск (nativeLibraryDir), чтобы можно было
+    // запускать бинарь Hysteria2 (libhysteria.so) как подпроцесс в прямом режиме.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {

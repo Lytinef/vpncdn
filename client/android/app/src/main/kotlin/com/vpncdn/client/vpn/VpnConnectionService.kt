@@ -37,6 +37,7 @@ class VpnConnectionService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tun: ParcelFileDescriptor? = null
     private var xray: XrayCore? = null
+    private var hysteria: HysteriaCore? = null
     private var tun2socks: Tun2socks? = null
     private var killSwitch = false
     private var savedConfig: String? = null
@@ -100,24 +101,39 @@ class VpnConnectionService : VpnService() {
     /** Поднимает ядро Xray + tun2socks поверх уже существующего TUN. */
     private fun startCore(cfg: JSONObject) {
         val conn = cfg.getJSONObject("connection")
-        val xrayConfig = XrayConfigBuilder.build(
-            socksPort = SOCKS_PORT,
-            uuid = conn.getString("uuid"),
-            address = conn.getString("address"),
-            port = conn.getInt("port"),
-            sni = conn.getString("sni"),
-            wsPath = conn.optString("wsPath", ""),
-            wsHost = conn.optString("wsHost", ""),
-            bypassEnabled = cfg.optBoolean("bypassEnabled", true),
-            bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
-            security = conn.optString("security", "tls"),
-            network = conn.optString("network", "xhttp"),
-            flow = conn.optString("flow", ""),
-            publicKey = conn.optString("publicKey", ""),
-            shortId = conn.optString("shortId", ""),
-            fingerprint = conn.optString("fingerprint", "chrome"),
-        )
-        xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
+        if (conn.optString("protocol", "vless") == "hysteria2") {
+            // Прямой режим: Hysteria2 (UDP/QUIC) как подпроцесс, SOCKS на SOCKS_PORT.
+            val hyConfig = HysteriaConfigBuilder.build(
+                socksPort = SOCKS_PORT,
+                server = conn.getString("address"),
+                port = conn.getInt("port"),
+                auth = conn.optString("auth", "").ifEmpty { conn.getString("uuid") },
+                sni = conn.getString("sni"),
+                certPin = conn.optString("certPin", ""),
+                insecure = conn.optBoolean("insecure", true),
+            )
+            hysteria = HysteriaCore(applicationInfo.nativeLibraryDir) { Log.i(TAG, "hysteria: $it") }
+                .also { it.start(filesDir, hyConfig) }
+        } else {
+            val xrayConfig = XrayConfigBuilder.build(
+                socksPort = SOCKS_PORT,
+                uuid = conn.getString("uuid"),
+                address = conn.getString("address"),
+                port = conn.getInt("port"),
+                sni = conn.getString("sni"),
+                wsPath = conn.optString("wsPath", ""),
+                wsHost = conn.optString("wsHost", ""),
+                bypassEnabled = cfg.optBoolean("bypassEnabled", true),
+                bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
+                security = conn.optString("security", "tls"),
+                network = conn.optString("network", "xhttp"),
+                flow = conn.optString("flow", ""),
+                publicKey = conn.optString("publicKey", ""),
+                shortId = conn.optString("shortId", ""),
+                fingerprint = conn.optString("fingerprint", "chrome"),
+            )
+            xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
+        }
         tun2socks = Tun2socks().also { it.start(filesDir, tun!!.fd, SOCKS_PORT, MTU, DNS) }
     }
 
@@ -136,6 +152,7 @@ class VpnConnectionService : VpnService() {
                 VpnBus.setStage("connecting")
                 tun2socks?.stop(); tun2socks = null
                 xray?.stop(); xray = null
+                hysteria?.stop(); hysteria = null
                 startCore(JSONObject(cfgJson))
                 if (ProxyProbe.reachable(SOCKS_PORT, 6000)) {
                     VpnBus.setStage("connected")
@@ -260,6 +277,7 @@ class VpnConnectionService : VpnService() {
         savedConfig = null
         tun2socks?.stop(); tun2socks = null
         xray?.stop(); xray = null
+        hysteria?.stop(); hysteria = null
         try { tun?.close() } catch (_: Exception) {}
         tun = null
         stopForeground(STOP_FOREGROUND_REMOVE)
