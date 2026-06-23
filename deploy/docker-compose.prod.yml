@@ -75,8 +75,6 @@ services:
     environment:
       AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
       INBOUND_TAG: vless-in
-      # Прямой режим (Reality). Без ключа reality-инбаунд не поднимается.
-      REALITY_PRIVATE_KEY: ${REALITY_PRIVATE_KEY:-}
     volumes:
       - ../xray/cert:/etc/xray/cert:ro
       - ../xray/data:/data

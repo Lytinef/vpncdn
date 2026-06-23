@@ -54,32 +54,6 @@
         "enabled": true,
         "destOverride": ["http", "tls", "quic"]
       }
-    },
-    {
-      "tag": "vless-reality",
-      "listen": "0.0.0.0",
-      "port": 443,
-      "protocol": "vless",
-      "settings": {
-        "clients": [],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "show": false,
-          "dest": "caddy:443",
-          "xver": 0,
-          "serverNames": ["api.lytinef.ru"],
-          "privateKey": "",
-          "shortIds": ["a55b174e3012a001"]
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"]
-      }
     }
   ],
 

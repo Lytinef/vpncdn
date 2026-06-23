@@ -278,9 +278,7 @@ const app = express();
 app.use(express.json());
 
 app.use((req, res, next) => {
-  // /health и /hy2auth — без Bearer: первый публичный, второй вызывает только
-  // hysteria2 по внутренней docker-сети.
-  if (req.path === '/health' || req.path === '/hy2auth') return next();
+  if (req.path === '/health') return next();
   const auth = req.headers.authorization || '';
   if (!SECRET || auth !== `Bearer ${SECRET}`) {
     return res.status(401).json({ error: 'unauthorized' });
@@ -289,15 +287,6 @@ app.use((req, res, next) => {
 });
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', clients: clients.length }));
-
-// Аутентификация hysteria2 (auth.type=http): пароль клиента = его xrayUuid.
-// Валиден, если UUID есть в списке клиентов (тот же, что и для xray) →
-// один UUID = одно устройство и для CDN, и для прямого режима.
-app.post('/hy2auth', (req, res) => {
-  const pass = (req.body && (req.body.auth || req.body.password)) || '';
-  const ok = clients.some((c) => c.id === pass);
-  res.json({ ok, id: ok ? pass : '' });
-});
 
 app.get('/clients', (_req, res) => res.json(clients));
 

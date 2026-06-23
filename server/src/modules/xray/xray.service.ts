@@ -59,9 +59,6 @@ export interface VlessConnection {
   direct: ConnectionVariant | null;
 }
 
-const REALITY_FLOW = 'xtls-rprx-vision';
-const REALITY_FP = 'chrome';
-
 @Injectable()
 export class XrayService {
   constructor(private readonly nodeClient: XrayNodeClient) {}
@@ -154,89 +151,15 @@ export class XrayService {
     };
   }
 
-  /** Прямой вариант мимо CDN: hysteria2 (по умолчанию) или reality. null если не настроен. */
-  private buildDirectVariant(node: Node, device: Device): ConnectionVariant | null {
-    if (!node.directHost) return null;
-    if (node.directProtocol === 'reality') return this.buildRealityVariant(node, device);
-    if (node.directProtocol === 'hysteria2') return this.buildHysteria2Variant(node, device);
-    // 'awg' — конфиг выдаётся ботом файлом; нативный awg-клиент в приложении — отдельная стадия.
+  /**
+   * Прямой вариант для нативного приложения. Сейчас прямой режим — AmneziaWG,
+   * и его конфиг провижинится отдельно (devices.getAwgConfig / бот, а для
+   * нативного клиента — по pubkey устройства). В синхронном buildConnection
+   * awg не собираем → direct=null; тумблер «Напрямую» в приложении использует
+   * awg через отдельный поток.
+   */
+  private buildDirectVariant(_node: Node, _device: Device): ConnectionVariant | null {
     return null;
-  }
-
-  /** Прямой через Hysteria2 (UDP/QUIC). Пароль = uuid.
-   *  Сервер на настоящем LE-серте (api.lytinef.ru) → insecure/pin не нужны,
-   *  конфиг принимают все клиенты (happ/Hiddify/NekoBox). Если у узла задан
-   *  directCertPin — режим self-signed (insecure+pin) для совместимости. */
-  private buildHysteria2Variant(node: Node, device: Device): ConnectionVariant | null {
-    const sni = node.directSni || 'api.lytinef.ru';
-    const certPin = node.directCertPin || '';
-    const selfSigned = certPin.length > 0;
-    let uri =
-      `hysteria2://${encodeURIComponent(device.xrayUuid)}@${node.directHost}:${node.directPort}` +
-      `?sni=${encodeURIComponent(sni)}`;
-    if (selfSigned) {
-      uri += `&insecure=1&pinSHA256=${encodeURIComponent(certPin)}`;
-    }
-    uri += `#${encodeURIComponent(node.name + ' • Direct')}`;
-
-    return {
-      mode: 'direct',
-      protocol: 'hysteria2',
-      uuid: device.xrayUuid,
-      address: node.directHost!,
-      port: node.directPort,
-      encryption: 'none',
-      security: 'tls',
-      sni,
-      network: 'udp',
-      wsPath: '',
-      wsHost: '',
-      flow: '',
-      publicKey: '',
-      shortId: '',
-      fingerprint: '',
-      auth: device.xrayUuid,
-      certPin,
-      insecure: selfSigned,
-      uri,
-    };
-  }
-
-  /** Прямой через VLESS + XTLS-Vision + Reality (TCP). */
-  private buildRealityVariant(node: Node, device: Device): ConnectionVariant | null {
-    const publicKey = node.directPublicKey;
-    if (!publicKey) return null;
-    const sni = node.directSni || 'www.microsoft.com';
-    const shortId = node.directShortId || '';
-    const uri =
-      `vless://${device.xrayUuid}@${node.directHost}:${node.directPort}` +
-      `?encryption=none&security=reality&sni=${encodeURIComponent(sni)}` +
-      `&fp=${REALITY_FP}&pbk=${encodeURIComponent(publicKey)}` +
-      (shortId ? `&sid=${encodeURIComponent(shortId)}` : '') +
-      `&type=tcp&flow=${REALITY_FLOW}` +
-      `#${encodeURIComponent(node.name + ' • Direct')}`;
-
-    return {
-      mode: 'direct',
-      protocol: 'vless',
-      uuid: device.xrayUuid,
-      address: node.directHost!,
-      port: node.directPort,
-      encryption: 'none',
-      security: 'reality',
-      sni,
-      network: 'tcp',
-      wsPath: '',
-      wsHost: '',
-      flow: REALITY_FLOW,
-      publicKey,
-      shortId,
-      fingerprint: REALITY_FP,
-      auth: '',
-      certPin: '',
-      insecure: false,
-      uri,
-    };
   }
 
   private emailFor(device: Device): string {
