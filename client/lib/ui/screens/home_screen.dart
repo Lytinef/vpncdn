@@ -135,7 +135,7 @@ class _ConnectionCard extends StatelessWidget {
               _stageLabel(vpn.stage),
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
-            if (vpn.directOffered) _ModeToggle(vpn: vpn),
+            _ModeToggle(vpn: vpn),
             if (vpn.error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8, left: 24, right: 24),

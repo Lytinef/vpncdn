@@ -14,7 +14,8 @@
     <application
         android:label="Unway"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:extractNativeLibs="true">
 
         <activity
             android:name=".MainActivity"
