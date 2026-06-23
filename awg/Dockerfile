@@ -17,10 +17,8 @@ FROM node:20-alpine
 RUN apk add --no-cache bash iproute2 iptables ca-certificates
 COPY --from=build /out/amneziawg-go /usr/bin/amneziawg-go
 COPY --from=build /out/tools/usr/bin/awg /usr/bin/awg
-COPY --from=build /out/tools/usr/bin/awg-quick /usr/bin/awg-quick
-# awg-quick без kernel-модуля использует userspace-реализацию из этой переменной
-ENV WG_QUICK_USERSPACE_IMPLEMENTATION=amneziawg-go \
-    WG_SUDO=1
+# awg-quick не нужен: интерфейс поднимаем вручную в entrypoint.sh
+# (amneziawg-go + awg set + ip + iptables).
 
 WORKDIR /app
 COPY package.json ./
