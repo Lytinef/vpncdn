@@ -115,17 +115,27 @@ class WindowsVpnEngine implements VpnEngine {
             : const <String>[]);
       _logLine('bypass domains resolved: ${_bypassIps.length} IP');
 
-      // 2) Конфиг Xray — vnext.address = конкретный edge-IP (Host/SNI = домен,
-      // NGENIX роутит по Host).
-      await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
-
-      // 3) Xray.
-      _xray = await Process.start(
-        '$_binDir\\xray.exe',
-        ['run', '-c', cfgFile.path],
-        workingDirectory: _binDir,
-      );
-      _pipe(_xray!, 'xray');
+      // 2-3) Ядро: прямой режим Hysteria2 (UDP/QUIC) → hysteria.exe; иначе xray.
+      // Оба отдают SOCKS на _socksPort, дальше tun2socks одинаков.
+      if (config.connection.protocol == 'hysteria2') {
+        final hyFile = File('${_workDir.path}\\hysteria-config.json');
+        await hyFile.writeAsString(_buildHysteriaConfig(config, _serverIps.first));
+        _xray = await Process.start(
+          '$_binDir\\hysteria.exe',
+          ['client', '-c', hyFile.path],
+          workingDirectory: _binDir,
+        );
+        _pipe(_xray!, 'hysteria');
+      } else {
+        // vnext.address = конкретный edge-IP (Host/SNI = домен, NGENIX роутит по Host).
+        await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
+        _xray = await Process.start(
+          '$_binDir\\xray.exe',
+          ['run', '-c', cfgFile.path],
+          workingDirectory: _binDir,
+        );
+        _pipe(_xray!, 'xray');
+      }
       await _waitSocks();
 
       // 4) tun2socks (создаёт wintun-адаптер).
@@ -340,6 +350,31 @@ class WindowsVpnEngine implements VpnEngine {
     _logLine('bypass routes added: ${_bypassIps.length}');
   }
 
+  /// Конфиг Hysteria2-клиента (прямой режим): SOCKS на _socksPort, UDP/QUIC до
+  /// сервера. server = уже отрезолвленный IP (host-route уводит его мимо туннеля).
+  String _buildHysteriaConfig(TunnelConfig config, String serverAddress) {
+    final c = config.connection;
+    final cfg = {
+      'server': '$serverAddress:${c.port}',
+      'auth': c.auth.isNotEmpty ? c.auth : c.uuid,
+      'tls': {
+        'sni': c.sni,
+        'insecure': c.insecure,
+        if (c.certPin.isNotEmpty) 'pinSHA256': c.certPin,
+      },
+      'socks5': {'listen': '127.0.0.1:$_socksPort'},
+      // Окна QUIC под высокий BDP международного пути.
+      'quic': {
+        'initStreamReceiveWindow': 8388608,
+        'maxStreamReceiveWindow': 8388608,
+        'initConnReceiveWindow': 20971520,
+        'maxConnReceiveWindow': 20971520,
+      },
+      'fastOpen': true,
+    };
+    return const JsonEncoder.withIndent('  ').convert(cfg);
+  }
+
   Future<String> _ps(String script) async {
     final r = await Process.run('powershell', ['-NoProfile', '-Command', script]);
     return (r.stdout as String?) ?? '';
@@ -349,6 +384,7 @@ class WindowsVpnEngine implements VpnEngine {
   Future<void> _killOrphans() async {
     await _run('taskkill', ['/F', '/T', '/IM', 'tun2socks.exe']);
     await _run('taskkill', ['/F', '/T', '/IM', 'xray.exe']);
+    await _run('taskkill', ['/F', '/T', '/IM', 'hysteria.exe']);
   }
 
   Future<void> _run(String exe, List<String> args) async {

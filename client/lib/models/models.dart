@@ -152,22 +152,28 @@ class Device {
 /// mode='direct': Vision+Reality мимо CDN (ниже пинг, IP блокируем).
 class VlessConnection {
   final String mode;
+  final String protocol; // 'vless' | 'hysteria2'
   final String uuid;
   final String address;
   final int port;
   final String sni;
   final String security; // 'tls' | 'reality'
-  final String network; // 'xhttp' | 'tcp'
+  final String network; // 'xhttp' | 'tcp' | 'udp'
   final String wsPath;
   final String wsHost;
   final String flow;
   final String publicKey;
   final String shortId;
   final String fingerprint;
+  // hysteria2:
+  final String auth;
+  final String certPin;
+  final bool insecure;
   final String uri;
 
   VlessConnection({
     required this.mode,
+    required this.protocol,
     required this.uuid,
     required this.address,
     required this.port,
@@ -180,11 +186,15 @@ class VlessConnection {
     required this.publicKey,
     required this.shortId,
     required this.fingerprint,
+    required this.auth,
+    required this.certPin,
+    required this.insecure,
     required this.uri,
   });
 
   factory VlessConnection.fromJson(Map<String, dynamic> j) => VlessConnection(
         mode: j['mode'] ?? 'cdn',
+        protocol: j['protocol'] ?? 'vless',
         uuid: j['uuid'],
         address: j['address'],
         port: j['port'],
@@ -197,11 +207,15 @@ class VlessConnection {
         publicKey: j['publicKey'] ?? '',
         shortId: j['shortId'] ?? '',
         fingerprint: j['fingerprint'] ?? '',
+        auth: j['auth'] ?? '',
+        certPin: j['certPin'] ?? '',
+        insecure: j['insecure'] ?? false,
         uri: j['uri'] ?? '',
       );
 
   Map<String, dynamic> toMap() => {
         'mode': mode,
+        'protocol': protocol,
         'uuid': uuid,
         'address': address,
         'port': port,
@@ -214,6 +228,9 @@ class VlessConnection {
         'publicKey': publicKey,
         'shortId': shortId,
         'fingerprint': fingerprint,
+        'auth': auth,
+        'certPin': certPin,
+        'insecure': insecure,
         'uri': uri,
       };
 }
