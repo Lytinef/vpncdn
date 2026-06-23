@@ -114,6 +114,9 @@ class VpnConnectionService : VpnService() {
             )
             hysteria = HysteriaCore(applicationInfo.nativeLibraryDir) { Log.i(TAG, "hysteria: $it") }
                 .also { it.start(filesDir, hyConfig) }
+            // hysteria поднимает SOCKS асинхронно (~0.5–1с). Дожидаемся порта,
+            // иначе проба бьёт в ещё закрытый SOCKS и коннект падает мгновенно.
+            waitForLocalPort(SOCKS_PORT, 8000)
         } else {
             val xrayConfig = XrayConfigBuilder.build(
                 socksPort = SOCKS_PORT,
@@ -135,6 +138,23 @@ class VpnConnectionService : VpnService() {
             xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
         }
         tun2socks = Tun2socks().also { it.start(filesDir, tun!!.fd, SOCKS_PORT, MTU, DNS) }
+    }
+
+    /** Ждёт, пока локальный SOCKS-порт начнёт принимать соединения (для hysteria,
+     *  чья SOCKS-точка поднимается асинхронно после старта подпроцесса). */
+    private fun waitForLocalPort(port: Int, timeoutMs: Int) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                java.net.Socket().use {
+                    it.connect(java.net.InetSocketAddress("127.0.0.1", port), 500)
+                }
+                return
+            } catch (_: Exception) {
+                Thread.sleep(200)
+            }
+        }
+        Log.w(TAG, "SOCKS $port не открылся за ${timeoutMs}ms")
     }
 
     /**
