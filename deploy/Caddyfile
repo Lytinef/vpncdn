@@ -1,8 +1,7 @@
 # Caddy: автоматический HTTPS (Let's Encrypt) для API и админки.
-# Замените домены и e-mail. Caddy сам выпустит и продлит сертификаты.
 
 {
-    email admin@example.com
+    email lytinef@gmail.com
     # Отключаем HTTP/3: udp/443 занят hysteria (прямой режим). Иначе Caddy
     # анонсирует Alt-Svc h3=":443", браузер идёт по HTTP/3 в hysteria → NetworkError.
     servers {
@@ -11,11 +10,11 @@
 }
 
 # API backend
-api.example.com {
+api.lytinef.ru {
     reverse_proxy server:3000
 }
 
 # Веб-админка (статика на nginx внутри контейнера admin)
-admin.example.com {
+admin.lytinef.ru {
     reverse_proxy admin:80
 }
