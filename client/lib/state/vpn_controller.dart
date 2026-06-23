@@ -71,6 +71,24 @@ class VpnController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _directProbed = false;
+
+  /// Узнаёт у сервера, доступен ли прямой режим, ДО подключения — чтобы тумблер
+  /// был виден сразу. Вызывать с главного экрана при наличии подписки.
+  Future<void> refreshDirectAvailability() async {
+    if (_directProbed || stage != VpnStage.disconnected) return;
+    _directProbed = true;
+    try {
+      final deviceId = await _ensureDevice();
+      final connection = await _api.connection(deviceId);
+      _settings.directOffered = connection.hasDirect;
+      _settings.cachedConnection = jsonEncode(connection.toMap());
+      notifyListeners();
+    } catch (_) {
+      _directProbed = false; // повторим позже (не было сети/подписки)
+    }
+  }
+
   void setSplitEnabled(bool v) {
     if (!canEditTunnelSettings) return;
     _settings.splitEnabled = v;
