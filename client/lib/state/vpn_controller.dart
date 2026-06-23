@@ -161,16 +161,58 @@ class VpnController extends ChangeNotifier {
   Future<TunnelConfig> _buildConfigOnline() async {
     final deviceId = await _ensureDevice();
     final connection = await _api.connection(deviceId);
-    // Запоминаем, доступен ли прямой режим (для тумблера), и кэшируем оба
-    // варианта — чтобы офлайн переключение тоже работало.
+    // Запоминаем, доступен ли прямой режим (для тумблера), и кэшируем конфиг.
     _settings.directOffered = connection.hasDirect;
     _settings.cachedConnection = jsonEncode(connection.toMap());
     final bypass = await _loadBypass();
-    return _composeConfig(
-      connection.select(_settings.directMode),
-      bypass.apps.map((e) => e.value).toList(),
-      bypass.domains.map((e) => e.value).toList(),
+    final apps = bypass.apps.map((e) => e.value).toList();
+    final domains = bypass.domains.map((e) => e.value).toList();
+
+    // Прямой режим через AmneziaWG (нативный awg-туннель).
+    if (_settings.directMode && connection.directAwg) {
+      final awgCfg = await _buildAwgConfig(deviceId, connection, apps, domains);
+      if (awgCfg != null) return awgCfg;
+      // awg не получился (нет ключей/бинаря) — откат на CDN.
+    }
+    return _composeConfig(connection.select(_settings.directMode), apps, domains);
+  }
+
+  /// Собирает конфиг прямого режима AmneziaWG: генерит/берёт WG-пару, шлёт pubkey,
+  /// получает awg-конфиг. null — если awg недоступен (нет бинаря/ключей).
+  Future<TunnelConfig?> _buildAwgConfig(
+    String deviceId,
+    DeviceConnection conn,
+    List<String> apps,
+    List<String> domains,
+  ) async {
+    final pub = await _ensureWgKeys();
+    if (pub == null) return null;
+    final awg = await _api.awgConfig(deviceId, pub);
+    if (awg == null) return null;
+    return TunnelConfig(
+      connection: conn.cdn, // обязательное поле; в awg-режиме не используется
+      killSwitch: _settings.killSwitch,
+      bypassEnabled: _settings.bypassEnabled,
+      bypassApps: apps,
+      bypassDomains: domains,
+      splitEnabled: _settings.splitEnabled,
+      splitMode: _settings.splitMode,
+      splitApps: _settings.splitApps,
+      awg: awg,
+      wgPrivateKey: _settings.wgPrivateKey,
     );
+  }
+
+  /// Возвращает WG-pubkey устройства, генерируя пару при первом обращении.
+  Future<String?> _ensureWgKeys() async {
+    if (_settings.wgPublicKey != null && _settings.wgPrivateKey != null) {
+      return _settings.wgPublicKey;
+    }
+    final kp = await _engine.generateWgKeypair();
+    if (kp == null) return null;
+    _settings.wgPrivateKey = kp['private'];
+    _settings.wgPublicKey = kp['public'];
+    return kp['public'];
   }
 
   TunnelConfig _composeConfig(

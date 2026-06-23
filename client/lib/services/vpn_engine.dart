@@ -34,6 +34,10 @@ class TunnelConfig {
   final bool splitEnabled;
   final String splitMode; // include | exclude
   final List<String> splitApps;
+  // Прямой режим AmneziaWG: если awg != null — движок поднимает awg-туннель
+  // (amneziawg-go) вместо xray/CDN. wgPrivateKey — локальный приватный ключ устройства.
+  final AwgConfig? awg;
+  final String? wgPrivateKey;
 
   TunnelConfig({
     required this.connection,
@@ -44,6 +48,8 @@ class TunnelConfig {
     required this.splitEnabled,
     required this.splitMode,
     required this.splitApps,
+    this.awg,
+    this.wgPrivateKey,
   });
 
   Map<String, dynamic> toMap() => {
@@ -55,6 +61,15 @@ class TunnelConfig {
         'splitEnabled': splitEnabled,
         'splitMode': splitMode,
         'splitApps': splitApps,
+        if (awg != null)
+          'awg': {
+            'address': awg!.address,
+            'serverPublicKey': awg!.serverPublicKey,
+            'endpoint': awg!.endpoint,
+            'mtu': awg!.mtu,
+            'privateKey': wgPrivateKey ?? '',
+            'params': awg!.params,
+          },
       };
 }
 
@@ -70,6 +85,10 @@ abstract class VpnEngine {
   Future<List<InstalledApp>> installedApps();
   Future<void> setAutoStart(bool enabled);
   Future<void> setStatsActive(bool active);
+
+  /// Генерирует WG-пару для прямого режима AmneziaWG (через бинарь awg).
+  /// Возвращает {'private','public'} или null, если awg не поддержан на платформе.
+  Future<Map<String, String>?> generateWgKeypair();
 }
 
 /// Выбор реализации по платформе.
@@ -133,4 +152,11 @@ class AndroidVpnEngine implements VpnEngine {
   @override
   Future<void> setStatsActive(bool active) =>
       _method.invokeMethod('setStatsActive', {'active': active});
+
+  @override
+  Future<Map<String, String>?> generateWgKeypair() async {
+    final r = await _method.invokeMethod<Map>('wgKeypair');
+    if (r == null) return null;
+    return {'private': r['private'] as String, 'public': r['public'] as String};
+  }
 }

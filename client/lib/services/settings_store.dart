@@ -7,6 +7,8 @@ class SettingsStore {
   static const _kBypassEnabled = 'bypass_enabled';
   static const _kDirectMode = 'direct_mode';
   static const _kDirectOffered = 'direct_offered';
+  static const _kWgPrivateKey = 'wg_private_key';
+  static const _kWgPublicKey = 'wg_public_key';
   static const _kSplitEnabled = 'split_enabled';
   static const _kSplitMode = 'split_mode'; // 'off' | 'include' | 'exclude'
   static const _kSplitApps = 'split_apps';
@@ -41,6 +43,14 @@ class SettingsStore {
   /// от этого зависит показ тумблера.
   bool get directOffered => _p.getBool(_kDirectOffered) ?? false;
   set directOffered(bool v) => _p.setBool(_kDirectOffered, v);
+
+  /// WG-пара устройства для прямого режима AmneziaWG (приватный не покидает устройство).
+  String? get wgPrivateKey => _p.getString(_kWgPrivateKey);
+  set wgPrivateKey(String? v) =>
+      v == null ? _p.remove(_kWgPrivateKey) : _p.setString(_kWgPrivateKey, v);
+  String? get wgPublicKey => _p.getString(_kWgPublicKey);
+  set wgPublicKey(String? v) =>
+      v == null ? _p.remove(_kWgPublicKey) : _p.setString(_kWgPublicKey, v);
 
   /// Раздельное туннелирование включено.
   bool get splitEnabled => _p.getBool(_kSplitEnabled) ?? false;

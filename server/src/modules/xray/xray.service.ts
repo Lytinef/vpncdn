@@ -57,6 +57,9 @@ export interface VlessConnection {
   uri: string;
   cdn: ConnectionVariant;
   direct: ConnectionVariant | null;
+  /** Узел предлагает прямой режим AmneziaWG (нативный) — клиент покажет тумблер
+   *  и пойдёт по awg-потоку (POST /devices/:id/awg). */
+  directAwg: boolean;
 }
 
 @Injectable()
@@ -102,6 +105,8 @@ export class XrayService {
       uri: cdn.uri,
       cdn,
       direct,
+      directAwg:
+        node.directProtocol === 'awg' && !!node.directApiUrl && !!node.directHost,
     };
   }
 

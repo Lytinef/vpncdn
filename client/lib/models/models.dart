@@ -264,10 +264,12 @@ class AwgConfig {
 class DeviceConnection {
   final VlessConnection cdn;
   final VlessConnection? direct;
+  /// Узел предлагает прямой режим AmneziaWG (нативный awg-туннель).
+  final bool directAwg;
 
-  DeviceConnection({required this.cdn, this.direct});
+  DeviceConnection({required this.cdn, this.direct, this.directAwg = false});
 
-  bool get hasDirect => direct != null;
+  bool get hasDirect => direct != null || directAwg;
 
   /// Вариант по флагу режима (если прямого нет — всегда CDN).
   VlessConnection select(bool directMode) =>
@@ -281,12 +283,17 @@ class DeviceConnection {
     final direct = j['direct'] != null
         ? VlessConnection.fromJson(j['direct'] as Map<String, dynamic>)
         : null;
-    return DeviceConnection(cdn: cdn, direct: direct);
+    return DeviceConnection(
+      cdn: cdn,
+      direct: direct,
+      directAwg: j['directAwg'] ?? false,
+    );
   }
 
   Map<String, dynamic> toMap() => {
         'cdn': cdn.toMap(),
         if (direct != null) 'direct': direct!.toMap(),
+        'directAwg': directAwg,
       };
 }
 
