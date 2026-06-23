@@ -89,8 +89,9 @@ export const billingMenuKeyboard = (): InlineKeyboard =>
     .row()
     .text('⬅️ В меню', 'menu:main');
 
-export const backKeyboard = (): InlineKeyboard =>
-  new InlineKeyboard().text('⬅️ В меню', 'menu:main');
+// Кнопка «назад» с настраиваемой целью (на шаг назад, а не сразу в главное меню).
+export const backKeyboard = (target = 'menu:main'): InlineKeyboard =>
+  new InlineKeyboard().text('⬅️ Назад', target);
 
 export function statusKeyboard(sub: Subscription | null): InlineKeyboard {
   const kb = new InlineKeyboard();
@@ -100,13 +101,14 @@ export function statusKeyboard(sub: Subscription | null): InlineKeyboard {
     kb.text('💳 Оформить тариф', 'menu:plans').row();
   } else {
     kb.text('🔄 Сменить тариф', 'menu:change').row();
-    if (sub.status === SubscriptionStatus.CANCELED) {
-      kb.text('▶️ Возобновить подписку', 'autopay:on').row();
-    } else if (sub.autoRenew) {
+    // Тумблер автопродления виден всегда для платного тарифа (вкл/выкл).
+    if (sub.autoRenew) {
       kb.text('⏸ Отключить автопродление', 'autopay:off').row();
+    } else {
+      kb.text('▶️ Включить автопродление', 'autopay:on').row();
     }
   }
-  return kb.text('⬅️ В меню', 'menu:main');
+  return kb.text('⬅️ Назад', 'menu:cat:billing');
 }
 
 export function plansKeyboard(
@@ -122,7 +124,7 @@ export function plansKeyboard(
       `${action}:${p.code}`,
     ).row();
   }
-  return kb.text('⬅️ В меню', 'menu:main');
+  return kb.text('⬅️ Назад', 'menu:cat:billing');
 }
 
 export function devicesKeyboard(devices: Device[]): InlineKeyboard {
@@ -130,7 +132,7 @@ export function devicesKeyboard(devices: Device[]): InlineKeyboard {
   for (const d of devices) {
     kb.text(`🗑 Удалить «${d.name}»`, `dev:rm:${d.id}`).row();
   }
-  return kb.text('⬅️ В меню', 'menu:main');
+  return kb.text('⬅️ Назад', 'menu:cat:connect');
 }
 
 // ── Тексты ─────────────────────────────────────────────────

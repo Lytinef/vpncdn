@@ -256,6 +256,26 @@ export class SubscriptionsService {
     return this.subs.save(sub);
   }
 
+  /**
+   * Включает автопродление для любого платного тарифа: и отменённого
+   * (CANCELED), и активного с autoRenew=false (например, выданного вручную).
+   * Карта должна быть привязана — проверяется на стороне вызывающего (бот).
+   */
+  async enableAutoRenew(userId: string): Promise<Subscription> {
+    const sub = await this.getActive(userId);
+    if (!sub) throw new NotFoundException('Активная подписка не найдена');
+    if (sub.plan?.code === PlanCode.TRIAL) {
+      throw new BadRequestException('Автопродление доступно только на платном тарифе');
+    }
+    sub.cancelAtPeriodEnd = false;
+    sub.autoRenew = true;
+    if (sub.status === SubscriptionStatus.CANCELED) {
+      sub.status = SubscriptionStatus.ACTIVE;
+      sub.canceledAt = null;
+    }
+    return this.subs.save(sub);
+  }
+
   /** Смена тарифа со следующего периода. */
   async changePlan(userId: string, planCode: PlanCode): Promise<Subscription> {
     const sub = await this.getActive(userId);

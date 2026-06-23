@@ -165,7 +165,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       await this.render(
         ctx,
         '💳 <b>Тарифы</b>\n\nУ вас уже есть активный тариф. Для перехода используйте «Сменить тариф».',
-        ui.backKeyboard(),
+        ui.backKeyboard('menu:cat:billing'),
       );
       return;
     }
@@ -230,7 +230,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const text = sub.nextPlan
       ? `✅ Со следующего периода тариф изменится на <b>${sub.nextPlan.name}</b>.`
       : `✅ Запланированная смена отменена — останется <b>${sub.plan.name}</b>.`;
-    await this.render(ctx, text, ui.backKeyboard());
+    await this.render(ctx, text, ui.backKeyboard('menu:cat:billing'));
   }
 
   private async setAutopay(ctx: Context, on: boolean): Promise<void> {
@@ -254,7 +254,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       await this.showBindCard(ctx, true);
       return;
     }
-    const sub = await this.subs.resume(userId);
+    const sub = await this.subs.enableAutoRenew(userId);
     await this.render(
       ctx,
       `✅ Автопродление включено. Тариф «${sub.plan.name}» продлится автоматически.`,
@@ -295,7 +295,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     const kb = new InlineKeyboard()
       .url(`💳 Привязать карту (${checkout.amountRub} ₽)`, checkout.confirmationUrl)
       .row()
-      .text('⬅️ В меню', 'menu:main');
+      .text('⬅️ Назад', 'menu:cat:billing');
     const head = forAutopay
       ? '💳 <b>Нужна привязанная карта</b>\n\n' +
         'Для автопродления привяжите карту — после привязки автопродление ' +
@@ -317,7 +317,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       await this.render(
         ctx,
         '📲 <b>Конфиг</b>\n\nНет активной подписки — оформите тариф, чтобы получить конфиг.',
-        ui.backKeyboard(),
+        ui.backKeyboard('menu:cat:connect'),
       );
       return;
     }
@@ -327,13 +327,13 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
         ctx,
         `📲 <b>Конфиг</b>\n\nДостигнут лимит устройств (${used} из ${limit}). ` +
           'Освободите слот в «📱 Мои устройства».',
-        ui.backKeyboard(),
+        ui.backKeyboard('menu:cat:connect'),
       );
       return;
     }
     const kb = new InlineKeyboard()
       .text('✅ Добавить', 'config:add')
-      .text('⬅️ Отменить', 'menu:main');
+      .text('⬅️ Отменить', 'menu:cat:connect');
     await this.render(
       ctx,
       '📲 <b>Новый конфиг</b>\n\n' +
@@ -352,7 +352,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     });
     const conn = await this.devices.getConnection(userId, device.id);
     const directBlock = conn.direct
-      ? '\n\n🚀 <b>Прямой</b> (быстрее, ниже пинг; если не работает — используйте «через CDN»):\n\n' +
+      ? '\n\n🚀 <b>Напрямую</b> (быстрее, ниже пинг; если не работает — используйте «Обход»):\n\n' +
         `<code>${ui.escapeHtml(conn.direct.uri)}</code>`
       : '';
     await this.render(
@@ -360,11 +360,11 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       '📲 <b>Конфиг готов</b>\n\n' +
         'Импортируйте ссылку в клиент с поддержкой VLESS (Happ, v2RayTun, v2rayNG). ' +
         'Обе ссылки — одно устройство тарифа.\n\n' +
-        '🛡 <b>Через CDN</b> (обход блокировок, стабильно):\n\n' +
+        '🛡 <b>Обход</b> (обход блокировок, стабильно):\n\n' +
         `<code>${ui.escapeHtml(conn.cdn.uri)}</code>` +
         directBlock +
         '\n\nУчитывается в лимите устройств — удалить можно в «📱 Мои устройства».',
-      ui.backKeyboard(),
+      ui.backKeyboard('menu:cat:connect'),
     );
   }
 
@@ -377,7 +377,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       '🔐 <b>Код для входа в приложение</b>\n\n' +
         `<code>${code}</code>\n\n` +
         `Введите его в приложении Unway. Код одноразовый и действует ${mins} мин.`,
-      ui.backKeyboard(),
+      ui.backKeyboard('menu:cat:connect'),
     );
   }
 
@@ -393,7 +393,7 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
         // Если карту привязывали ради автопродления — включаем его.
         if (this.pendingAutopay.delete(ev.userId)) {
           try {
-            const sub = await this.subs.resume(ev.userId);
+            const sub = await this.subs.enableAutoRenew(ev.userId);
             await this.bot.api.sendMessage(
               user.telegramId,
               '✅ <b>Карта привязана, автопродление включено.</b>\n\n' +
