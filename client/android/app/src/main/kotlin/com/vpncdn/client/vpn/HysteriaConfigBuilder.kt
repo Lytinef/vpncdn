@@ -28,6 +28,10 @@ object HysteriaConfigBuilder {
             .put("server", "$server:$port")
             .put("auth", auth)
             .put("tls", tls)
+            // bandwidth → включает brutal CC: сервер шлёт на этой скорости, игнорируя
+            // дросселирование пути (где BBR занижал бы). Главный регулятор скорости
+            // hysteria2. Значения с запасом под мобильный/домашний канал.
+            .put("bandwidth", JSONObject().put("up", "50 mbps").put("down", "200 mbps"))
             .put("socks5", JSONObject().put("listen", "127.0.0.1:$socksPort"))
             // Окна QUIC под высокий BDP международного пути — выше throughput.
             .put(
