@@ -42,3 +42,6 @@ admin/node_modules/
 
 # Docker volumes
 deploy/data/
+
+# AmneziaWG runtime
+awg/data/

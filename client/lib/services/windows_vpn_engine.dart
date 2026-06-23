@@ -362,9 +362,6 @@ class WindowsVpnEngine implements VpnEngine {
         'insecure': c.insecure,
         if (c.certPin.isNotEmpty) 'pinSHA256': c.certPin,
       },
-      // bandwidth → brutal CC: сервер шлёт на этой скорости, игнорируя
-      // дросселирование пути (где BBR занижал бы). Главный регулятор скорости.
-      'bandwidth': {'up': '50 mbps', 'down': '200 mbps'},
       'socks5': {'listen': '127.0.0.1:$_socksPort'},
       // Окна QUIC под высокий BDP международного пути.
       'quic': {

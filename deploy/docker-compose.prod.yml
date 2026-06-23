@@ -105,6 +105,30 @@ services:
     ports:
       - "443:443/udp"
 
+  # Прямой режим через AmneziaWG (WireGuard + обфускация против DPI) — userspace
+  # amneziawg-go. Провижининг пиров — мини-API на :8091 (backend, по AGENT_SECRET).
+  awg:
+    build:
+      context: ../awg
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv4.conf.all.src_valid_mark: "1"
+    environment:
+      AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
+      AWG_PRIVATE_KEY: ${AWG_PRIVATE_KEY:?set AWG_PRIVATE_KEY}
+    volumes:
+      - ../awg/data:/data
+    expose:
+      - "8091"
+    ports:
+      - "51820:51820/udp"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
