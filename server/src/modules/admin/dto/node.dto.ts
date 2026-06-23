@@ -43,7 +43,11 @@ export class CreateNodeDto {
   @IsString()
   apiSecret?: string;
 
-  // ── Прямой режим (мимо CDN), VLESS+Vision+Reality ──
+  // ── Прямой режим (мимо CDN): hysteria2 | reality ──
+  @IsOptional()
+  @IsString()
+  directProtocol?: string;
+
   @IsOptional()
   @IsString()
   directHost?: string;
@@ -65,6 +69,10 @@ export class CreateNodeDto {
   @IsOptional()
   @IsString()
   directSni?: string;
+
+  @IsOptional()
+  @IsString()
+  directCertPin?: string;
 
   @IsOptional()
   @IsInt()

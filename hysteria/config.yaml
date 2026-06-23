@@ -1,0 +1,29 @@
+# Hysteria2 — прямой режим (UDP/QUIC, устойчив к потерям на международном пути,
+# где TCP-reality рвётся). Слушает 443/udp (камуфляж под HTTP/3 рядом с
+# xray-reality на 443/tcp). Self-signed cert + pinSHA256 на клиенте (защита от
+# MITM без ACME). Аутентификация — через агент (живая проверка UUID по clients.json),
+# отдельного провижининга не нужно: один UUID авторизует и xray, и hysteria2.
+listen: :443
+
+tls:
+  cert: /etc/hysteria/cert.pem
+  key: /etc/hysteria/key.pem
+
+auth:
+  type: http
+  http:
+    url: http://xray-node:8090/hy2auth
+
+# Не-hysteria трафик (зонды) отдаём как реальный сайт.
+masquerade:
+  type: proxy
+  proxy:
+    url: https://www.bing.com/
+    rewriteHost: true
+
+# Окна QUIC под высокий BDP (международный путь) — выше throughput.
+quic:
+  initStreamReceiveWindow: 8388608
+  maxStreamReceiveWindow: 8388608
+  initConnReceiveWindow: 20971520
+  maxConnReceiveWindow: 20971520

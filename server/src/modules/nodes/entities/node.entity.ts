@@ -45,9 +45,14 @@ export class Node {
   @Column({ type: 'varchar', length: 128, default: '/ws' })
   wsPath: string;
 
-  // ── Прямой режим (мимо CDN): VLESS + XTLS-Vision + Reality ──
-  // Если directHost и directPublicKey заданы — клиенту выдаётся второй конфиг
-  // для прямого подключения (ниже пинг, но IP блокируем). Иначе — только CDN.
+  // ── Прямой режим (мимо CDN) ──
+  // directProtocol='hysteria2' (UDP/QUIC, устойчив к потерям) или 'reality'
+  // (VLESS+Vision+Reality, TCP). Если directHost задан — клиент получает второй
+  // конфиг для прямого подключения (ниже пинг, но IP блокируем). Иначе — только CDN.
+
+  /** Протокол прямого режима: 'hysteria2' | 'reality'. */
+  @Column({ type: 'varchar', length: 16, default: 'hysteria2' })
+  directProtocol: string;
 
   /** Адрес origin для прямого подключения клиента (IP или домен). */
   @Column({ type: 'varchar', length: 255, nullable: true })
@@ -65,9 +70,13 @@ export class Node {
   @Column({ type: 'varchar', length: 64, nullable: true })
   directShortId: string | null;
 
-  /** SNI/serverName прямого режима (домен маскировки Reality). */
+  /** SNI/serverName прямого режима (домен маскировки Reality/TLS). */
   @Column({ type: 'varchar', length: 255, nullable: true })
   directSni: string | null;
+
+  /** pinSHA256 сертификата для Hysteria2 (self-signed, защита от MITM). */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  directCertPin: string | null;
 
   /** URL API управления Xray на узле (добавление/удаление пользователей). */
   @Column({ type: 'varchar', length: 255, nullable: true })

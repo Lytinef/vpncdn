@@ -352,15 +352,16 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     });
     const conn = await this.devices.getConnection(userId, device.id);
     const directBlock = conn.direct
-      ? '\n\n🚀 <b>Напрямую</b> (быстрее, ниже пинг; если не работает — используйте «Обход»):\n\n' +
+      ? '\n\n🚀 <b>Напрямую</b> (быстрее, ниже пинг; протокол Hysteria2 — ' +
+        'импортируйте в <b>Hiddify</b> или NekoBox):\n\n' +
         `<code>${ui.escapeHtml(conn.direct.uri)}</code>`
       : '';
     await this.render(
       ctx,
       '📲 <b>Конфиг готов</b>\n\n' +
-        'Импортируйте ссылку в клиент с поддержкой VLESS (Happ, v2RayTun, v2rayNG). ' +
         'Обе ссылки — одно устройство тарифа.\n\n' +
-        '🛡 <b>Обход</b> (обход блокировок, стабильно):\n\n' +
+        '🛡 <b>Обход</b> (обход блокировок, стабильно; клиенты с VLESS — ' +
+        'Happ, v2RayTun, v2rayNG):\n\n' +
         `<code>${ui.escapeHtml(conn.cdn.uri)}</code>` +
         directBlock +
         '\n\nУчитывается в лимите устройств — удалить можно в «📱 Мои устройства».',

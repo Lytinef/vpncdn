@@ -20,7 +20,7 @@ $cfg = @'
 {
   "log":{"loglevel":"warning"},
   "inbounds":[{"tag":"s","listen":"127.0.0.1","port":10899,"protocol":"socks","settings":{"udp":false}}],
-  "outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"169.40.1.216","port":2053,"users":[{"id":"396b03c3-0847-4eb9-84d0-e1b5a2f954bc","encryption":"none","flow":"xtls-rprx-vision"}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"www.microsoft.com","publicKey":"-oB_3aZAD9plHzR3DbrYG_XOcMv3BinI8dTOFvRAZCI","shortId":"a55b174e3012a001","fingerprint":"chrome","show":true}}}]
+  "outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"169.40.1.216","port":443,"users":[{"id":"396b03c3-0847-4eb9-84d0-e1b5a2f954bc","encryption":"none","flow":"xtls-rprx-vision"}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"api.lytinef.ru","publicKey":"-oB_3aZAD9plHzR3DbrYG_XOcMv3BinI8dTOFvRAZCI","shortId":"a55b174e3012a001","fingerprint":"chrome","show":true}}}]
 }
 '@
 $cfgPath = "$env:TEMP\direct-cli.json"

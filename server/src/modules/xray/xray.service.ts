@@ -6,27 +6,35 @@ import { XrayNodeClient } from './xray-node.client';
 /** Один вариант подключения (через CDN или напрямую). */
 export interface ConnectionVariant {
   /** 'cdn' — VLESS+XHTTP+TLS через NGENIX (обход блокировок).
-   *  'direct' — VLESS+Vision+Reality мимо CDN (ниже пинг, IP блокируем). */
+   *  'direct' — мимо CDN (ниже пинг, IP блокируем): hysteria2 или reality. */
   mode: 'cdn' | 'direct';
-  protocol: 'vless';
+  /** 'vless' (cdn/reality) | 'hysteria2' (прямой по UDP/QUIC). */
+  protocol: 'vless' | 'hysteria2';
   uuid: string;
   address: string;
   port: number;
   encryption: 'none';
-  /** 'tls' для CDN, 'reality' для прямого. */
+  /** 'tls' для CDN, 'reality' для reality-прямого, 'tls' для hysteria2. */
   security: 'tls' | 'reality';
   sni: string;
-  /** 'xhttp' для CDN, 'tcp' для прямого. */
-  network: 'xhttp' | 'tcp';
+  /** 'xhttp' для CDN, 'tcp' для reality, 'udp' для hysteria2. */
+  network: 'xhttp' | 'tcp' | 'udp';
   // CDN (xhttp):
   wsPath: string;
   wsHost: string;
-  // direct (reality):
+  // direct/reality:
   flow: string;
   publicKey: string;
   shortId: string;
   fingerprint: string;
-  /** Готовая vless:// ссылка (для импорта в happ/v2rayng). */
+  // direct/hysteria2:
+  /** Пароль hysteria2 (= uuid). */
+  auth: string;
+  /** pinSHA256 сертификата hysteria2 (self-signed). */
+  certPin: string;
+  /** Пропустить проверку CA (self-signed; защита через certPin). */
+  insecure: boolean;
+  /** Готовая ссылка (vless:// или hysteria2://) для импорта. */
   uri: string;
 }
 
@@ -139,19 +147,64 @@ export class XrayService {
       publicKey: '',
       shortId: '',
       fingerprint: '',
+      auth: '',
+      certPin: '',
+      insecure: false,
       uri,
     };
   }
 
-  /** Прямой вариант: VLESS + XTLS-Vision + Reality мимо CDN. null если не настроен. */
+  /** Прямой вариант мимо CDN: hysteria2 (по умолчанию) или reality. null если не настроен. */
   private buildDirectVariant(node: Node, device: Device): ConnectionVariant | null {
-    if (!node.directHost || !node.directPublicKey) return null;
+    if (!node.directHost) return null;
+    if (node.directProtocol === 'reality') return this.buildRealityVariant(node, device);
+    return this.buildHysteria2Variant(node, device);
+  }
+
+  /** Прямой через Hysteria2 (UDP/QUIC). Пароль = uuid; self-signed + pinSHA256. */
+  private buildHysteria2Variant(node: Node, device: Device): ConnectionVariant | null {
+    const certPin = node.directCertPin;
+    if (!certPin) return null; // без пина небезопасно — не выдаём
+    const sni = node.directSni || 'api.lytinef.ru';
+    const uri =
+      `hysteria2://${encodeURIComponent(device.xrayUuid)}@${node.directHost}:${node.directPort}` +
+      `?sni=${encodeURIComponent(sni)}&insecure=1` +
+      `&pinSHA256=${encodeURIComponent(certPin)}` +
+      `#${encodeURIComponent(node.name + ' • Direct')}`;
+
+    return {
+      mode: 'direct',
+      protocol: 'hysteria2',
+      uuid: device.xrayUuid,
+      address: node.directHost!,
+      port: node.directPort,
+      encryption: 'none',
+      security: 'tls',
+      sni,
+      network: 'udp',
+      wsPath: '',
+      wsHost: '',
+      flow: '',
+      publicKey: '',
+      shortId: '',
+      fingerprint: '',
+      auth: device.xrayUuid,
+      certPin,
+      insecure: true,
+      uri,
+    };
+  }
+
+  /** Прямой через VLESS + XTLS-Vision + Reality (TCP). */
+  private buildRealityVariant(node: Node, device: Device): ConnectionVariant | null {
+    const publicKey = node.directPublicKey;
+    if (!publicKey) return null;
     const sni = node.directSni || 'www.microsoft.com';
     const shortId = node.directShortId || '';
     const uri =
       `vless://${device.xrayUuid}@${node.directHost}:${node.directPort}` +
       `?encryption=none&security=reality&sni=${encodeURIComponent(sni)}` +
-      `&fp=${REALITY_FP}&pbk=${encodeURIComponent(node.directPublicKey)}` +
+      `&fp=${REALITY_FP}&pbk=${encodeURIComponent(publicKey)}` +
       (shortId ? `&sid=${encodeURIComponent(shortId)}` : '') +
       `&type=tcp&flow=${REALITY_FLOW}` +
       `#${encodeURIComponent(node.name + ' • Direct')}`;
@@ -160,7 +213,7 @@ export class XrayService {
       mode: 'direct',
       protocol: 'vless',
       uuid: device.xrayUuid,
-      address: node.directHost,
+      address: node.directHost!,
       port: node.directPort,
       encryption: 'none',
       security: 'reality',
@@ -169,9 +222,12 @@ export class XrayService {
       wsPath: '',
       wsHost: '',
       flow: REALITY_FLOW,
-      publicKey: node.directPublicKey,
+      publicKey,
       shortId,
       fingerprint: REALITY_FP,
+      auth: '',
+      certPin: '',
+      insecure: false,
       uri,
     };
   }

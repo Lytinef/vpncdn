@@ -89,6 +89,20 @@ services:
       # Не-VPN трафик (api/admin, вебхуки) reality проксирует в Caddy (dest=caddy:443).
       - "443:443"
 
+  # Прямой режим через Hysteria2 (UDP/QUIC) на 443/udp — рядом с reality (443/tcp),
+  # выглядит как HTTP/3. Для лоссовых международных путей, где TCP-reality рвётся.
+  # auth — через агент xray-node (тот же UUID = одно устройство).
+  hysteria:
+    image: tobyxdd/hysteria
+    restart: unless-stopped
+    command: ["server", "-c", "/etc/hysteria/config.yaml"]
+    depends_on:
+      - xray-node
+    volumes:
+      - ../hysteria:/etc/hysteria
+    ports:
+      - "443:443/udp"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
