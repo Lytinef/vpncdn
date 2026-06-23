@@ -85,9 +85,8 @@ services:
     ports:
       # origin для NGENIX (TLS). Закрыть фаерволом для подсетей NGENIX.
       - "8443:8443"
-      # Прямой режим (VLESS+Vision+Reality) на 443: маскируется под обычный HTTPS.
-      # Не-VPN трафик (api/admin, вебхуки) reality проксирует в Caddy (dest=caddy:443).
-      - "443:443"
+      # 443/tcp вернули Caddy (reality-фронтинг ломал api.lytinef.ru в браузерах).
+      # Прямой режим теперь Hysteria2 на 443/udp (см. сервис hysteria).
 
   # Прямой режим через Hysteria2 (UDP/QUIC) на 443/udp — рядом с reality (443/tcp),
   # выглядит как HTTP/3. Для лоссовых международных путей, где TCP-reality рвётся.
@@ -113,11 +112,9 @@ services:
       - server
       - admin
     ports:
-      # 443 на хосте занимает xray (reality); сюда reality проксирует не-VPN трафик
-      # по docker-сети (caddy:443). 80 оставляем для ACME http-01 (выпуск/продление).
       - "80:80"
-    expose:
-      - "443"
+      # api/admin напрямую (reality убран с 443/tcp). 443/udp у hysteria — не конфликтует.
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
