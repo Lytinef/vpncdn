@@ -355,13 +355,19 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       ? '\n\n🚀 <b>Напрямую</b>\n\n' +
         `<code>${ui.escapeHtml(conn.direct.uri)}</code>`
       : '';
+    const bothWarn = conn.direct
+      ? '\n\n⚠️ <b>Добавьте сразу обе ссылки</b> — это одно устройство (лимит ' +
+        'не тратится дважды). Потом сможете переключаться: «Обход» стабильнее, ' +
+        '«Напрямую» быстрее.'
+      : '';
     await this.render(
       ctx,
       '📲 <b>Конфиг готов</b>\n\n' +
         '🛡 <b>Обход</b>\n\n' +
         `<code>${ui.escapeHtml(conn.cdn.uri)}</code>` +
         directBlock +
-        '\n\nОбе ссылки — одно устройство. Удалить — в «📱 Мои устройства».',
+        bothWarn +
+        '\n\nУдалить — в «📱 Мои устройства».',
       ui.backKeyboard('menu:cat:connect'),
     );
   }
