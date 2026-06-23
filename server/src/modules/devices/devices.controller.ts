@@ -51,6 +51,16 @@ export class DevicesController {
     return this.devices.getConnection(userId, id);
   }
 
+  /** Прямой режим (AmneziaWG): устройство шлёт свой WG-pubkey → структурный конфиг. */
+  @Post(':id/awg')
+  awgConfig(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body('publicKey') publicKey: string,
+  ) {
+    return this.devices.getAwgClientConfig(userId, id, publicKey);
+  }
+
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async remove(@CurrentUser('id') userId: string, @Param('id') id: string) {

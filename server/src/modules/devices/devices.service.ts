@@ -118,6 +118,28 @@ export class DevicesService {
     return cfg.confText;
   }
 
+  /**
+   * Прямой режим для нативного клиента: устройство присылает свой WG-pubkey
+   * (приватный ключ хранит локально), получает структурный awg-конфиг.
+   * null — если у узла awg не настроен.
+   */
+  async getAwgClientConfig(
+    userId: string,
+    deviceId: string,
+    publicKey: string,
+  ): Promise<Record<string, unknown> | null> {
+    const sub = await this.subscriptions.getActive(userId);
+    if (!this.subscriptions.hasAccess(sub)) {
+      throw new ForbiddenException('Нет активной подписки');
+    }
+    const device = await this.getOwned(userId, deviceId);
+    const node = await this.ensureNode(device);
+    if (!this.awg.enabled(node)) return null;
+    const cfg = await this.awg.provisionForClient(node, publicKey);
+    await this.devices.update(device.id, { awgPublicKey: publicKey });
+    return cfg;
+  }
+
   async remove(userId: string, deviceId: string): Promise<void> {
     const device = await this.getOwned(userId, deviceId);
     if (device.nodeId) {

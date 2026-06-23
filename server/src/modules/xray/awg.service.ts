@@ -52,6 +52,30 @@ export class AwgService {
     return { publicKey: c.publicKey, confText };
   }
 
+  /**
+   * Провижинит пира по pubkey, сгенерированному НА устройстве (приватный ключ
+   * не покидает устройство). Возвращает структурный конфиг для нативного клиента.
+   */
+  async provisionForClient(
+    node: Node,
+    publicKey: string,
+  ): Promise<{
+    address: string;
+    serverPublicKey: string;
+    endpoint: string;
+    mtu: number;
+    params: Record<string, string | number>;
+  }> {
+    const c = await this.client.addPeer(node, publicKey);
+    return {
+      address: c.address,
+      serverPublicKey: c.serverPublicKey,
+      endpoint: `${node.directHost}:${c.listenPort}`,
+      mtu: c.mtu,
+      params: c.params,
+    };
+  }
+
   removePeer(node: Node, publicKey: string): Promise<void> {
     return this.client.removePeer(node, publicKey);
   }
