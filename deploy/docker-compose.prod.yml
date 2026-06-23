@@ -121,7 +121,9 @@ services:
       net.ipv4.conf.all.src_valid_mark: "1"
     environment:
       AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
-      AWG_PRIVATE_KEY: ${AWG_PRIVATE_KEY:?set AWG_PRIVATE_KEY}
+      # Необязательна на уровне compose (иначе build/genkey не запустить, пока
+      # ключ не сгенерён). entrypoint валидирует при старте контейнера.
+      AWG_PRIVATE_KEY: ${AWG_PRIVATE_KEY:-}
     volumes:
       - ../awg/data:/data
     expose:
