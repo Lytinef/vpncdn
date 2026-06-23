@@ -2,7 +2,7 @@
 # Прямой режим VPN: WireGuard с обфускацией (Jc/Jmin/Jmax/S1/S2/H1-4) против DPI.
 
 # ── сборка amneziawg-go и amneziawg-tools ──
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 RUN apk add --no-cache git make gcc musl-dev linux-headers bash
 # userspace-реализация (TUN), т.к. в ядре нет awg-модуля
 RUN git clone --depth=1 https://github.com/amnezia-vpn/amneziawg-go /src/go \
