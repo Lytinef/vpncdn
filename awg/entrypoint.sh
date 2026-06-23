@@ -7,25 +7,36 @@ SUBNET="${AWG_SUBNET:-10.8.2}"
 PORT="${AWG_LISTEN_PORT:-51820}"
 : "${AWG_PRIVATE_KEY:?AWG_PRIVATE_KEY не задан}"
 
-# Параметры обфускации (ДОЛЖНЫ совпадать с клиентами). Значения по умолчанию —
-# из env, чтобы можно было поменять без пересборки.
-JC="${AWG_JC:-4}";   JMIN="${AWG_JMIN:-40}"; JMAX="${AWG_JMAX:-70}"
-S1="${AWG_S1:-50}";  S2="${AWG_S2:-100}"
-H1="${AWG_H1:-1735840940}"; H2="${AWG_H2:-1357416448}"
-H3="${AWG_H3:-1644068449}"; H4="${AWG_H4:-1465942839}"
+MTU="${AWG_MTU:-1376}"
 
-# 1) userspace-демон создаёт TUN awg0 (форкается в фон)
-amneziawg-go "$IFACE"
+# Профиль обфускации AmneziaWG 2.0 (ДОЛЖЕН совпадать с клиентами). Значения по
+# умолчанию — рабочий awg2-профиль; переопределяются через env.
+JC="${AWG_JC:-6}";   JMIN="${AWG_JMIN:-10}"; JMAX="${AWG_JMAX:-50}"
+S1="${AWG_S1:-102}"; S2="${AWG_S2:-94}";  S3="${AWG_S3:-24}";  S4="${AWG_S4:-5}"
+H1="${AWG_H1:-735017314-1784971875}";  H2="${AWG_H2:-1928766202-1941935460}"
+H3="${AWG_H3:-2096113811-2127150958}"; H4="${AWG_H4:-2141629287-2145783098}"
+# I1 — «магический» пакет, мимикрирующий под DNS-ответ (awg2). Длинный → отдельно.
+I1="${AWG_I1:-<b 0x084481800001000300000000077469636b65747306776964676574096b696e6f706f69736b0272750000010001c00c0005000100000039001806776964676574077469636b6574730679616e646578c025c0390005000100000039002b1765787465726e616c2d7469636b6574732d776964676574066166697368610679616e646578036e657400c05d000100010000001c000457fafe25>}"
 
-# 2) ключ + порт + обфускация
+# 1) Интерфейс: предпочитаем kernel-модуль amneziawg (быстрый датапас), иначе
+# userspace amneziawg-go (медленнее, но без модуля ядра).
+if ip link add dev "$IFACE" type amneziawg 2>/dev/null; then
+  echo "[awg] kernel-модуль amneziawg"
+else
+  echo "[awg] kernel-модуля нет → userspace amneziawg-go"
+  amneziawg-go "$IFACE"
+fi
+
+# 2) ключ + порт + awg2-обфускация
 printf '%s\n' "$AWG_PRIVATE_KEY" > /tmp/awg.key
 awg set "$IFACE" private-key /tmp/awg.key listen-port "$PORT" \
-  jc "$JC" jmin "$JMIN" jmax "$JMAX" s1 "$S1" s2 "$S2" \
-  h1 "$H1" h2 "$H2" h3 "$H3" h4 "$H4"
+  jc "$JC" jmin "$JMIN" jmax "$JMAX" s1 "$S1" s2 "$S2" s3 "$S3" s4 "$S4" \
+  h1 "$H1" h2 "$H2" h3 "$H3" h4 "$H4" i1 "$I1"
 rm -f /tmp/awg.key
 
-# 3) адрес сервера в подсети + поднять линк
+# 3) адрес сервера в подсети + MTU + поднять линк
 ip addr add "$SUBNET.1/24" dev "$IFACE" 2>/dev/null || true
+ip link set "$IFACE" mtu "$MTU"
 ip link set "$IFACE" up
 
 # 4) NAT: трафик пиров → в интернет

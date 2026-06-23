@@ -21,16 +21,24 @@ const LISTEN_PORT = parseInt(process.env.AWG_LISTEN_PORT || '51820', 10);
 const PEERS_FILE = process.env.PEERS_FILE || '/data/awg-peers.json';
 const PRIVATE_KEY = process.env.AWG_PRIVATE_KEY || '';
 
+const MTU = parseInt(process.env.AWG_MTU || '1376', 10);
+
+// Профиль обфускации AmneziaWG 2.0 (совпадает с entrypoint и клиентами).
 const PARAMS = {
-  jc: parseInt(process.env.AWG_JC || '4', 10),
-  jmin: parseInt(process.env.AWG_JMIN || '40', 10),
-  jmax: parseInt(process.env.AWG_JMAX || '70', 10),
-  s1: parseInt(process.env.AWG_S1 || '50', 10),
-  s2: parseInt(process.env.AWG_S2 || '100', 10),
-  h1: process.env.AWG_H1 || '1735840940',
-  h2: process.env.AWG_H2 || '1357416448',
-  h3: process.env.AWG_H3 || '1644068449',
-  h4: process.env.AWG_H4 || '1465942839',
+  jc: parseInt(process.env.AWG_JC || '6', 10),
+  jmin: parseInt(process.env.AWG_JMIN || '10', 10),
+  jmax: parseInt(process.env.AWG_JMAX || '50', 10),
+  s1: parseInt(process.env.AWG_S1 || '102', 10),
+  s2: parseInt(process.env.AWG_S2 || '94', 10),
+  s3: parseInt(process.env.AWG_S3 || '24', 10),
+  s4: parseInt(process.env.AWG_S4 || '5', 10),
+  h1: process.env.AWG_H1 || '735017314-1784971875',
+  h2: process.env.AWG_H2 || '1928766202-1941935460',
+  h3: process.env.AWG_H3 || '2096113811-2127150958',
+  h4: process.env.AWG_H4 || '2141629287-2145783098',
+  i1:
+    process.env.AWG_I1 ||
+    '<b 0x084481800001000300000000077469636b65747306776964676574096b696e6f706f69736b0272750000010001c00c0005000100000039001806776964676574077469636b6574730679616e646578c025c0390005000100000039002b1765787465726e616c2d7469636b6574732d776964676574066166697368610679616e646578036e657400c05d000100010000001c000457fafe25>',
 };
 
 let peers = loadPeers(); // [{ publicKey, ip }]
@@ -105,7 +113,7 @@ app.use((req, res, next) => {
 app.get('/health', (_req, res) => res.json({ status: 'ok', peers: peers.length }));
 
 app.get('/awg/info', (_req, res) =>
-  res.json({ serverPublicKey, listenPort: LISTEN_PORT, subnet: SUBNET, params: PARAMS }),
+  res.json({ serverPublicKey, listenPort: LISTEN_PORT, subnet: SUBNET, mtu: MTU, params: PARAMS }),
 );
 
 app.post('/awg/peers', (req, res) => {
@@ -133,6 +141,7 @@ app.post('/awg/peers', (req, res) => {
       publicKey,
       serverPublicKey,
       listenPort: LISTEN_PORT,
+      mtu: MTU,
       params: PARAMS,
       ...(generatedPrivate ? { privateKey: generatedPrivate } : {}),
     });
