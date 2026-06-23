@@ -75,6 +75,10 @@ export class CreateNodeDto {
   directCertPin?: string;
 
   @IsOptional()
+  @IsString()
+  directApiUrl?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(1)
   capacity?: number;

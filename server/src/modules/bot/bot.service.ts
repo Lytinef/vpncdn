@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Bot, Context, InlineKeyboard } from 'grammy';
+import { Bot, Context, InlineKeyboard, InputFile } from 'grammy';
 import { TelegramConfig } from '../../config/configuration';
 import { PAYMENT_SUCCEEDED, PaymentSucceededEvent } from '../../common/events';
 import { UsersService } from '../users/users.service';
@@ -351,25 +351,39 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       platform: DevicePlatform.IOS,
     });
     const conn = await this.devices.getConnection(userId, device.id);
-    const directBlock = conn.direct
-      ? '\n\n🚀 <b>Напрямую</b>\n\n' +
-        `<code>${ui.escapeHtml(conn.direct.uri)}</code>`
-      : '';
-    const bothWarn = conn.direct
-      ? '\n\n⚠️ <b>Добавьте сразу обе ссылки</b> — это одно устройство (лимит ' +
-        'не тратится дважды). Потом сможете переключаться: «Обход» стабильнее, ' +
-        '«Напрямую» быстрее.'
-      : '';
+
+    // 1) Обход (CDN, VLESS) — ссылка текстом + инструкция (Happ).
     await this.render(
       ctx,
-      '📲 <b>Конфиг готов</b>\n\n' +
-        '🛡 <b>Обход</b>\n\n' +
-        `<code>${ui.escapeHtml(conn.cdn.uri)}</code>` +
-        directBlock +
-        bothWarn +
-        '\n\nУдалить — в «📱 Мои устройства».',
+      '📲 <b>Конфиг готов</b> — занимает одно устройство тарифа.\n\n' +
+        '🛡 <b>Обход блокировок</b> (стабильно):\n' +
+        '1. Установите <b>Happ</b> (App Store / Google Play / GitHub).\n' +
+        '2. Скопируйте ссылку ниже (тап по ней).\n' +
+        '3. В Happ → «+» → «Из буфера обмена».\n\n' +
+        `<code>${ui.escapeHtml(conn.cdn.uri)}</code>`,
       ui.backKeyboard('menu:cat:connect'),
     );
+
+    // 2) Напрямую (AmneziaWG) — файл .conf + инструкция (AmneziaWG/AmneziaVPN).
+    let awgConf: string | null = null;
+    try {
+      awgConf = await this.devices.getAwgConfig(userId, device.id);
+    } catch (e) {
+      this.logger.warn(`awg-конфиг не выдан: ${String(e)}`);
+    }
+    if (awgConf) {
+      await ctx.replyWithDocument(
+        new InputFile(Buffer.from(awgConf, 'utf8'), 'unway-direct.conf'),
+        {
+          parse_mode: 'HTML',
+          caption:
+            '🚀 <b>Напрямую</b> (быстрее, ниже пинг) — тот же лимит устройства.\n' +
+            '1. Установите <b>AmneziaWG</b> или <b>AmneziaVPN</b> (App Store / Google Play).\n' +
+            '2. Скачайте этот файл конфигурации.\n' +
+            '3. В клиенте → импорт/«+» → из файла → выберите его → подключитесь.',
+        },
+      );
+    }
   }
 
   private async showLoginCode(ctx: Context): Promise<void> {

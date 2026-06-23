@@ -57,6 +57,10 @@ export class Device {
   @Column({ type: 'uuid' })
   xrayUuid: string;
 
+  /** Публичный ключ AmneziaWG-пира (прямой режим) — для снятия пира при удалении. */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  awgPublicKey: string | null;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 

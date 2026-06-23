@@ -78,6 +78,10 @@ export class Node {
   @Column({ type: 'varchar', length: 128, nullable: true })
   directCertPin: string | null;
 
+  /** URL API провижининга AmneziaWG-пиров (directProtocol='awg'), напр. http://awg:8091. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  directApiUrl: string | null;
+
   /** URL API управления Xray на узле (добавление/удаление пользователей). */
   @Column({ type: 'varchar', length: 255, nullable: true })
   apiUrl: string | null;

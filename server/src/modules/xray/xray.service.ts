@@ -158,7 +158,9 @@ export class XrayService {
   private buildDirectVariant(node: Node, device: Device): ConnectionVariant | null {
     if (!node.directHost) return null;
     if (node.directProtocol === 'reality') return this.buildRealityVariant(node, device);
-    return this.buildHysteria2Variant(node, device);
+    if (node.directProtocol === 'hysteria2') return this.buildHysteria2Variant(node, device);
+    // 'awg' — конфиг выдаётся ботом файлом; нативный awg-клиент в приложении — отдельная стадия.
+    return null;
   }
 
   /** Прямой через Hysteria2 (UDP/QUIC). Пароль = uuid.

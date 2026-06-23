@@ -12,6 +12,7 @@ import { Device } from './entities/device.entity';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { NodesService } from '../nodes/nodes.service';
 import { XrayService, VlessConnection } from '../xray/xray.service';
+import { AwgService } from '../xray/awg.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 @Injectable()
@@ -23,6 +24,7 @@ export class DevicesService {
     private readonly devices: Repository<Device>,
     private readonly nodes: NodesService,
     private readonly xray: XrayService,
+    private readonly awg: AwgService,
     private readonly subscriptions: SubscriptionsService,
   ) {}
 
@@ -99,11 +101,31 @@ export class DevicesService {
     return this.xray.buildConnection(node, device);
   }
 
+  /**
+   * Прямой режим через AmneziaWG: провижинит пира (ключи на сервере) и возвращает
+   * готовый .conf для AmneziaWG/AmneziaVPN. null — если у узла awg не настроен.
+   */
+  async getAwgConfig(userId: string, deviceId: string): Promise<string | null> {
+    const sub = await this.subscriptions.getActive(userId);
+    if (!this.subscriptions.hasAccess(sub)) {
+      throw new ForbiddenException('Нет активной подписки');
+    }
+    const device = await this.getOwned(userId, deviceId);
+    const node = await this.ensureNode(device);
+    if (!this.awg.enabled(node)) return null;
+    const cfg = await this.awg.buildConfig(node);
+    await this.devices.update(device.id, { awgPublicKey: cfg.publicKey });
+    return cfg.confText;
+  }
+
   async remove(userId: string, deviceId: string): Promise<void> {
     const device = await this.getOwned(userId, deviceId);
     if (device.nodeId) {
       const node = await this.nodes.findById(device.nodeId).catch(() => null);
-      if (node) await this.xray.deprovisionDevice(node, device);
+      if (node) {
+        await this.xray.deprovisionDevice(node, device);
+        if (device.awgPublicKey) await this.awg.removePeer(node, device.awgPublicKey);
+      }
     }
     await this.devices.delete(device.id);
     this.logger.log(`Устройство ${deviceId} удалено`);
