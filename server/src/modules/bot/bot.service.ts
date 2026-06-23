@@ -368,13 +368,18 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       '🚀 <b>Напрямую</b> — приложение <b>AmneziaWG</b> или <b>AmneziaVPN</b>:\n' +
       'установите → импорт из файла → выберите файл из этого сообщения.';
 
+    // Документ нельзя «отредактировать» поверх меню — поэтому удаляем предыдущее
+    // сообщение (экран меню/подтверждения) и шлём конфиг новым, с кнопкой возврата.
+    await ctx.answerCallbackQuery().catch(() => undefined);
+    await ctx.deleteMessage().catch(() => undefined);
+    const kb = ui.backKeyboard('menu:cat:connect');
     if (awgConf) {
       await ctx.replyWithDocument(
         new InputFile(Buffer.from(awgConf, 'utf8'), 'unway-direct.conf'),
-        { parse_mode: 'HTML', caption: text },
+        { parse_mode: 'HTML', caption: text, reply_markup: kb },
       );
     } else {
-      await this.render(ctx, text, ui.backKeyboard('menu:cat:connect'));
+      await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
     }
   }
 
