@@ -85,10 +85,6 @@ abstract class VpnEngine {
   Future<List<InstalledApp>> installedApps();
   Future<void> setAutoStart(bool enabled);
   Future<void> setStatsActive(bool active);
-
-  /// Генерирует WG-пару для прямого режима AmneziaWG (через бинарь awg).
-  /// Возвращает {'private','public'} или null, если awg не поддержан на платформе.
-  Future<Map<String, String>?> generateWgKeypair();
 }
 
 /// Выбор реализации по платформе.
@@ -152,11 +148,4 @@ class AndroidVpnEngine implements VpnEngine {
   @override
   Future<void> setStatsActive(bool active) =>
       _method.invokeMethod('setStatsActive', {'active': active});
-
-  @override
-  Future<Map<String, String>?> generateWgKeypair() async {
-    final r = await _method.invokeMethod<Map>('wgKeypair');
-    if (r == null) return null;
-    return {'private': r['private'] as String, 'public': r['public'] as String};
-  }
 }

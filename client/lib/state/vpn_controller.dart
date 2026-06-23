@@ -7,6 +7,7 @@ import '../services/api_client.dart';
 import '../services/settings_store.dart';
 import '../services/device_identity.dart';
 import '../services/vpn_engine.dart';
+import '../services/wg_keys.dart';
 
 class VpnController extends ChangeNotifier {
   final Api _api;
@@ -203,16 +204,20 @@ class VpnController extends ChangeNotifier {
     );
   }
 
-  /// Возвращает WG-pubkey устройства, генерируя пару при первом обращении.
+  /// Возвращает WG-pubkey устройства, генерируя пару при первом обращении
+  /// (Curve25519, кросс-платформенно; приватный ключ не покидает устройство).
   Future<String?> _ensureWgKeys() async {
     if (_settings.wgPublicKey != null && _settings.wgPrivateKey != null) {
       return _settings.wgPublicKey;
     }
-    final kp = await _engine.generateWgKeypair();
-    if (kp == null) return null;
-    _settings.wgPrivateKey = kp['private'];
-    _settings.wgPublicKey = kp['public'];
-    return kp['public'];
+    try {
+      final kp = await WgKeys.generate();
+      _settings.wgPrivateKey = kp['private'];
+      _settings.wgPublicKey = kp['public'];
+      return kp['public'];
+    } catch (_) {
+      return null;
+    }
   }
 
   TunnelConfig _composeConfig(

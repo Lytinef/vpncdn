@@ -264,6 +264,7 @@ class WindowsVpnEngine implements VpnEngine {
     _tun2socks = null;
     _xray?.kill(ProcessSignal.sigkill);
     _xray = null;
+    await _stopAwg(); // снять awg tunnel-сервис, если был поднят
     await _killOrphans();
     _serverIps.clear();
     _bypassIps.clear();
@@ -381,80 +382,36 @@ class WindowsVpnEngine implements VpnEngine {
     return const JsonEncoder.withIndent('  ').convert(cfg);
   }
 
-  @override
-  Future<Map<String, String>?> generateWgKeypair() async {
-    try {
-      final g = await Process.run('$_binDir\\awg.exe', ['genkey']);
-      final priv = (g.stdout as String).trim();
-      if (priv.isEmpty) return null;
-      final p = await Process.start('$_binDir\\awg.exe', ['pubkey'],
-          workingDirectory: _binDir);
-      p.stdin.write('$priv\n');
-      await p.stdin.close();
-      final pub = (await p.stdout.transform(utf8.decoder).join()).trim();
-      if (pub.isEmpty) return null;
-      return {'private': priv, 'public': pub};
-    } catch (e) {
-      _logLine('wg keygen error: $e');
-      return null;
-    }
-  }
+  /// Прямой режим AmneziaWG (Windows): tunnel-сервис amneziawg.exe из .conf.
+  /// Сервис сам создаёт адаптер, применяет awg-параметры, маршруты (AllowedIPs),
+  /// DNS, MTU и исключает endpoint из туннеля. Keygen — на стороне Dart (WgKeys).
+  static const _awgTunnel = 'unway-direct';
 
-  /// Прямой режим AmneziaWG: amneziawg-go.exe (wintun awg0) + awg setconf + маршруты.
   Future<void> _connectAwg(TunnelConfig config) async {
-    final awg = config.awg!;
-    final endpointHost = awg.endpoint.split(':').first;
-    _gateway = await _defaultGateway();
-    _serverIps
-      ..clear()
-      ..addAll(await _resolveIps(endpointHost));
-    if (_gateway == null || _serverIps.isEmpty) {
-      throw Exception('Не удалось определить шлюз/адрес awg-сервера');
-    }
-    _bypassIps
-      ..clear()
-      ..addAll(config.bypassEnabled
-          ? await _resolveBypassIps(config.bypassDomains)
-          : const <String>[]);
-
-    final confFile = File('${_workDir.path}\\awg.conf');
+    final confFile = File('${_workDir.path}\\$_awgTunnel.conf');
     await confFile.writeAsString(_buildAwgConf(config));
 
-    // amneziawg-go создаёт wintun-адаптер awg0 и держит туннель.
-    _xray = await Process.start(
-      '$_binDir\\amneziawg-go.exe',
-      ['awg0'],
+    // Снимаем прошлый сервис (если завис), затем ставим заново.
+    await _run('$_binDir\\amneziawg.exe', ['/uninstalltunnelservice', _awgTunnel]);
+    await Future.delayed(const Duration(milliseconds: 600));
+    final r = await Process.run(
+      '$_binDir\\amneziawg.exe',
+      ['/installtunnelservice', confFile.path],
       workingDirectory: _binDir,
-      environment: {'LOG_LEVEL': 'error'},
     );
-    _pipe(_xray!, 'awg-go');
-
-    final ifIndex = await _waitAdapter('awg0');
-    if (ifIndex == null) throw Exception('awg0 не поднялся');
-
-    await _run('$_binDir\\awg.exe', ['setconf', 'awg0', confFile.path]);
-    await _run('netsh',
-        ['interface', 'ip', 'set', 'address', 'name=awg0', 'static', awg.address, '255.255.255.0']);
-    await _run('netsh',
-        ['interface', 'ipv4', 'set', 'subinterface', 'awg0', 'mtu=${awg.mtu}', 'store=active']);
-    await _run('netsh', ['interface', 'ip', 'set', 'dns', 'name=awg0', 'static', '1.1.1.1']);
-
-    // Сервер awg в подсети = .1; через него — дефолт по двум /1 на интерфейсе awg0.
-    final parts = awg.address.split('.');
-    final subnetGw = '${parts[0]}.${parts[1]}.${parts[2]}.1';
-    // endpoint awg-сервера — мимо туннеля через реальный шлюз (иначе петля).
-    for (final ip in _serverIps) {
-      await _run('route', ['add', ip, 'mask', '255.255.255.255', _gateway!, 'metric', '1']);
+    _logLine('amneziawg /installtunnelservice -> ${r.exitCode} ${r.stdout} ${r.stderr}');
+    if (r.exitCode != 0) {
+      throw Exception('amneziawg /installtunnelservice: ${r.stderr}');
     }
-    await _run('route',
-        ['add', '0.0.0.0', 'mask', '128.0.0.0', subnetGw, 'metric', '1', 'if', '$ifIndex']);
-    await _run('route',
-        ['add', '128.0.0.0', 'mask', '128.0.0.0', subnetGw, 'metric', '1', 'if', '$ifIndex']);
 
     if (!await _probe()) throw Exception('Не удалось подключиться к серверу (awg)');
     _setStage(VpnStage.connected);
     _logLine('awg connected');
-    unawaited(_addBypassRoutes());
+  }
+
+  /// Снимает tunnel-сервис AmneziaWG (при отключении/очистке).
+  Future<void> _stopAwg() async {
+    await _run('$_binDir\\amneziawg.exe', ['/uninstalltunnelservice', _awgTunnel]);
   }
 
   String _buildAwgConf(TunnelConfig config) {
@@ -464,6 +421,9 @@ class WindowsVpnEngine implements VpnEngine {
     return [
       '[Interface]',
       'PrivateKey = ${config.wgPrivateKey}',
+      'Address = ${awg.address}/32',
+      'DNS = 1.1.1.1',
+      'MTU = ${awg.mtu}',
       'Jc = ${v('jc')}',
       'Jmin = ${v('jmin')}',
       'Jmax = ${v('jmax')}',
@@ -486,18 +446,6 @@ class WindowsVpnEngine implements VpnEngine {
     ].join('\n');
   }
 
-  /// Ждёт появления сетевого адаптера и возвращает его ifIndex.
-  Future<int?> _waitAdapter(String name) async {
-    for (var i = 0; i < 30; i++) {
-      final r = await _ps(
-          "(Get-NetAdapter -Name '$name' -ErrorAction SilentlyContinue).ifIndex");
-      final idx = int.tryParse(r.trim());
-      if (idx != null) return idx;
-      await Future.delayed(const Duration(milliseconds: 400));
-    }
-    return null;
-  }
-
   Future<String> _ps(String script) async {
     final r = await Process.run('powershell', ['-NoProfile', '-Command', script]);
     return (r.stdout as String?) ?? '';
@@ -508,7 +456,6 @@ class WindowsVpnEngine implements VpnEngine {
     await _run('taskkill', ['/F', '/T', '/IM', 'tun2socks.exe']);
     await _run('taskkill', ['/F', '/T', '/IM', 'xray.exe']);
     await _run('taskkill', ['/F', '/T', '/IM', 'hysteria.exe']);
-    await _run('taskkill', ['/F', '/T', '/IM', 'amneziawg-go.exe']);
   }
 
   Future<void> _run(String exe, List<String> args) async {
