@@ -58,7 +58,7 @@
     {
       "tag": "vless-reality",
       "listen": "0.0.0.0",
-      "port": 2053,
+      "port": 443,
       "protocol": "vless",
       "settings": {
         "clients": [],
@@ -69,9 +69,9 @@
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": "www.microsoft.com:443",
+          "dest": "caddy:443",
           "xver": 0,
-          "serverNames": ["www.microsoft.com"],
+          "serverNames": ["api.lytinef.ru"],
           "privateKey": "",
           "shortIds": ["a55b174e3012a001"]
         }

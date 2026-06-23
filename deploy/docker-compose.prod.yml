@@ -70,6 +70,8 @@ services:
       context: ../xray
       dockerfile: agent/Dockerfile
     restart: unless-stopped
+    depends_on:
+      - caddy
     environment:
       AGENT_SECRET: ${AGENT_SECRET:?set AGENT_SECRET}
       INBOUND_TAG: vless-in
@@ -83,8 +85,9 @@ services:
     ports:
       # origin для NGENIX (TLS). Закрыть фаерволом для подсетей NGENIX.
       - "8443:8443"
-      # Прямой режим (VLESS+Vision+Reality), мимо CDN. Открыт всем клиентам.
-      - "2053:2053"
+      # Прямой режим (VLESS+Vision+Reality) на 443: маскируется под обычный HTTPS.
+      # Не-VPN трафик (api/admin, вебхуки) reality проксирует в Caddy (dest=caddy:443).
+      - "443:443"
 
   caddy:
     image: caddy:2-alpine
@@ -93,8 +96,11 @@ services:
       - server
       - admin
     ports:
+      # 443 на хосте занимает xray (reality); сюда reality проксирует не-VPN трафик
+      # по docker-сети (caddy:443). 80 оставляем для ACME http-01 (выпуск/продление).
       - "80:80"
-      - "443:443"
+    expose:
+      - "443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
