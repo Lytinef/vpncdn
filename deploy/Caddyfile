@@ -2,11 +2,6 @@
 
 {
     email lytinef@gmail.com
-    # Отключаем HTTP/3: udp/443 занят hysteria (прямой режим). Иначе Caddy
-    # анонсирует Alt-Svc h3=":443", браузер идёт по HTTP/3 в hysteria → NetworkError.
-    servers {
-        protocols h1 h2
-    }
 }
 
 # API backend
