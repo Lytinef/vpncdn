@@ -67,6 +67,14 @@ class Api {
   Future<DeviceConnection> connection(String deviceId) async =>
       DeviceConnection.fromJson(await _c.get('/devices/$deviceId/connection'));
 
+  /// Прямой режим AmneziaWG: шлём свой WG-pubkey, получаем awg-конфиг
+  /// (address/serverPublicKey/endpoint/mtu/params). null — если awg не настроен.
+  Future<AwgConfig?> awgConfig(String deviceId, String publicKey) async {
+    final r = await _c.post('/devices/$deviceId/awg', body: {'publicKey': publicKey});
+    if (r == null) return null;
+    return AwgConfig.fromJson(r as Map<String, dynamic>);
+  }
+
   // ── список обхода ──
   Future<BypassList> bypass() async => BypassList.fromJson(await _c.get('/bypass'));
 

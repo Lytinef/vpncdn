@@ -235,6 +235,31 @@ class VlessConnection {
       };
 }
 
+/// Конфиг прямого режима AmneziaWG (для нативного awg-туннеля).
+class AwgConfig {
+  final String address; // IP клиента в подсети, напр. 10.8.2.5
+  final String serverPublicKey;
+  final String endpoint; // host:port сервера awg
+  final int mtu;
+  final Map<String, dynamic> params; // jc/jmin/jmax/s1..s4/h1..h4/i1
+
+  AwgConfig({
+    required this.address,
+    required this.serverPublicKey,
+    required this.endpoint,
+    required this.mtu,
+    required this.params,
+  });
+
+  factory AwgConfig.fromJson(Map<String, dynamic> j) => AwgConfig(
+        address: j['address'] ?? '',
+        serverPublicKey: j['serverPublicKey'] ?? '',
+        endpoint: j['endpoint'] ?? '',
+        mtu: j['mtu'] ?? 1376,
+        params: (j['params'] as Map?)?.cast<String, dynamic>() ?? const {},
+      );
+}
+
 /// Ответ сервера: два варианта подключения (CDN + опционально прямой).
 class DeviceConnection {
   final VlessConnection cdn;
