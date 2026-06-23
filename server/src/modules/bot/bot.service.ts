@@ -493,7 +493,9 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
       try {
         await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
       } catch {
-        // Например, "message is not modified" или сообщение слишком старое.
+        // Текущее сообщение нельзя отредактировать (это документ-конфиг, либо
+        // "не изменено"/слишком старое) — удаляем его и шлём экран заново.
+        await ctx.deleteMessage().catch(() => undefined);
         await ctx
           .reply(text, { parse_mode: 'HTML', reply_markup: kb })
           .catch(() => undefined);
