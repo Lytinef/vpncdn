@@ -6,6 +6,7 @@ import { Node } from '../nodes/entities/node.entity';
 import { Device } from '../devices/entities/device.entity';
 import { NodesService } from '../nodes/nodes.service';
 import { XrayService } from '../xray/xray.service';
+import { SosService } from '../sos/sos.service';
 import { AlertsService } from './alerts.service';
 
 /**
@@ -22,6 +23,7 @@ export class StatsPollerService {
     @InjectRepository(Device) private readonly devices: Repository<Device>,
     private readonly nodesService: NodesService,
     private readonly xray: XrayService,
+    private readonly sos: SosService,
     private readonly alerts: AlertsService,
   ) {}
 
@@ -56,11 +58,17 @@ export class StatsPollerService {
 
     const stats = await this.xray.fetchStats(node);
     for (const s of stats) {
-      const deviceId = this.deviceIdFromEmail(s.email);
-      if (!deviceId) continue;
       const up = Math.max(0, Math.round(s.uplink || 0));
       const down = Math.max(0, Math.round(s.downlink || 0));
       if (up === 0 && down === 0) continue;
+      // SOS-клиент (`sos.<id>@vpncdn`): учёт лимита 100 МБ отдельно.
+      const sosId = this.sosIdFromEmail(s.email);
+      if (sosId) {
+        await this.sos.applyStats(node, sosId, up + down).catch(() => undefined);
+        continue;
+      }
+      const deviceId = this.deviceIdFromEmail(s.email);
+      if (!deviceId) continue;
       await this.devices
         .createQueryBuilder()
         .update()
@@ -74,10 +82,18 @@ export class StatsPollerService {
     }
   }
 
-  /** email = `${userId}.${deviceId}@vpncdn`. */
+  /** email = `${userId}.${deviceId}@vpncdn` (но НЕ sos.*). */
   private deviceIdFromEmail(email: string): string | null {
     const local = (email || '').split('@')[0];
     const parts = local.split('.');
-    return parts.length === 2 ? parts[1] : null;
+    if (parts.length !== 2 || parts[0] === 'sos') return null;
+    return parts[1];
+  }
+
+  /** SOS-email `sos.${sosDeviceId}@vpncdn` → sosDeviceId. */
+  private sosIdFromEmail(email: string): string | null {
+    const local = (email || '').split('@')[0];
+    const parts = local.split('.');
+    return parts.length === 2 && parts[0] === 'sos' ? parts[1] : null;
   }
 }

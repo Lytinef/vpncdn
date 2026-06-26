@@ -37,8 +37,9 @@ class VpnConnectionService : VpnService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var tun: ParcelFileDescriptor? = null
     private var xray: XrayCore? = null
-    private var hysteria: HysteriaCore? = null
     private var tun2socks: Tun2socks? = null
+    // Прямой режим AmneziaWG: handle активного туннеля libwg-go (или null).
+    private var awgHandle: Int? = null
     private var killSwitch = false
     private var savedConfig: String? = null
     private var watchdog: Job? = null
@@ -57,7 +58,7 @@ class VpnConnectionService : VpnService() {
                     getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
                         .edit().putString(KEY_LAST_CONFIG, cfg).apply()
                     startForegroundNotification()
-                    VpnBus.setStage("connecting")
+                    publishStage("connecting")
                     // Тяжёлая инициализация + проверка доступности — вне главного потока.
                     scope.launch { connect(cfg) }
                 }
@@ -73,22 +74,27 @@ class VpnConnectionService : VpnService() {
             savedConfig = configJson
             killSwitch = cfg.optBoolean("killSwitch", false)
 
-            // TUN поднимаем один раз; при реконнекте переиспользуем (без повторного
-            // запроса разрешения VPN).
-            tun = buildTun(cfg, MTU, DNS) ?: run {
-                fail("Не удалось создать TUN")
-                return
-            }
-            startCore(cfg)
+            // Прямой режим AmneziaWG — отдельный путь (libwg-go поверх TUN, без xray).
+            if (cfg.has("awg")) {
+                if (!startAwg(cfg)) return
+            } else {
+                // TUN поднимаем один раз; при реконнекте переиспользуем (без повторного
+                // запроса разрешения VPN).
+                tun = buildTun(cfg, "10.10.0.2", MTU, DNS) ?: run {
+                    fail("Не удалось создать TUN")
+                    return
+                }
+                startCore(cfg)
 
-            // Подтверждаем, что туннель реально достаёт до сервера (а не просто
-            // поднялся TUN): пробный HTTP-запрос через SOCKS Xray.
-            if (!ProxyProbe.reachable(SOCKS_PORT, 6000)) {
-                fail("Не удалось подключиться к серверу")
-                return
+                // Подтверждаем, что туннель реально достаёт до сервера (а не просто
+                // поднялся TUN): пробный HTTP-запрос через SOCKS Xray.
+                if (!ProxyProbe.reachable(SOCKS_PORT, 6000)) {
+                    fail("Не удалось подключиться к серверу")
+                    return
+                }
             }
 
-            VpnBus.setStage("connected")
+            publishStage("connected")
             registerDefaultNetworkCallback()
             startWatchdog()
             Log.i(TAG, "VPN подключён")
@@ -101,60 +107,101 @@ class VpnConnectionService : VpnService() {
     /** Поднимает ядро Xray + tun2socks поверх уже существующего TUN. */
     private fun startCore(cfg: JSONObject) {
         val conn = cfg.getJSONObject("connection")
-        if (conn.optString("protocol", "vless") == "hysteria2") {
-            // Прямой режим: Hysteria2 (UDP/QUIC) как подпроцесс, SOCKS на SOCKS_PORT.
-            val hyConfig = HysteriaConfigBuilder.build(
-                socksPort = SOCKS_PORT,
-                server = conn.getString("address"),
-                port = conn.getInt("port"),
-                auth = conn.optString("auth", "").ifEmpty { conn.getString("uuid") },
-                sni = conn.getString("sni"),
-                certPin = conn.optString("certPin", ""),
-                insecure = conn.optBoolean("insecure", true),
-            )
-            hysteria = HysteriaCore(applicationInfo.nativeLibraryDir) { Log.i(TAG, "hysteria: $it") }
-                .also { it.start(filesDir, hyConfig) }
-            // hysteria поднимает SOCKS асинхронно (~0.5–1с). Дожидаемся порта,
-            // иначе проба бьёт в ещё закрытый SOCKS и коннект падает мгновенно.
-            waitForLocalPort(SOCKS_PORT, 8000)
-        } else {
-            val xrayConfig = XrayConfigBuilder.build(
-                socksPort = SOCKS_PORT,
-                uuid = conn.getString("uuid"),
-                address = conn.getString("address"),
-                port = conn.getInt("port"),
-                sni = conn.getString("sni"),
-                wsPath = conn.optString("wsPath", ""),
-                wsHost = conn.optString("wsHost", ""),
-                bypassEnabled = cfg.optBoolean("bypassEnabled", true),
-                bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
-                security = conn.optString("security", "tls"),
-                network = conn.optString("network", "xhttp"),
-                flow = conn.optString("flow", ""),
-                publicKey = conn.optString("publicKey", ""),
-                shortId = conn.optString("shortId", ""),
-                fingerprint = conn.optString("fingerprint", "chrome"),
-            )
-            xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
-        }
+        val xrayConfig = XrayConfigBuilder.build(
+            socksPort = SOCKS_PORT,
+            uuid = conn.getString("uuid"),
+            address = conn.getString("address"),
+            port = conn.getInt("port"),
+            sni = conn.getString("sni"),
+            wsPath = conn.optString("wsPath", ""),
+            wsHost = conn.optString("wsHost", ""),
+            bypassEnabled = cfg.optBoolean("bypassEnabled", true),
+            bypassDomains = cfg.optJSONArray("bypassDomains").toStringList(),
+            security = conn.optString("security", "tls"),
+            network = conn.optString("network", "xhttp"),
+            flow = conn.optString("flow", ""),
+            publicKey = conn.optString("publicKey", ""),
+            shortId = conn.optString("shortId", ""),
+            fingerprint = conn.optString("fingerprint", "chrome"),
+        )
+        xray = XrayCore(onStatus = { Log.i(TAG, "xray: $it") }).also { it.start(xrayConfig) }
         tun2socks = Tun2socks().also { it.start(filesDir, tun!!.fd, SOCKS_PORT, MTU, DNS) }
     }
 
-    /** Ждёт, пока локальный SOCKS-порт начнёт принимать соединения (для hysteria,
-     *  чья SOCKS-точка поднимается асинхронно после старта подпроцесса). */
-    private fun waitForLocalPort(port: Int, timeoutMs: Int) {
+    /**
+     * Прямой режим AmneziaWG: строит TUN (адрес/MTU из awg-конфига), отдаёт его fd
+     * в libwg-go и protect-ит UDP-сокет туннеля (мимо самого туннеля). Возвращает
+     * false и переводит в ошибку, если запуск/рукопожатие не удались.
+     */
+    private fun startAwg(cfg: JSONObject): Boolean {
+        if (!AwgCore.available) {
+            fail("Прямой режим недоступен в этой сборке")
+            return false
+        }
+        val awg = cfg.getJSONObject("awg")
+        val mtu = awg.optInt("mtu", 1376)
+        val pfd = buildTun(cfg, awg.getString("address"), mtu, DNS) ?: run {
+            fail("Не удалось создать TUN")
+            return false
+        }
+        // Передаём fd в Go (он становится владельцем и сам закроет на wgTurnOff).
+        val fd = pfd.detachFd()
+        val handle = AwgCore.wgTurnOn(AWG_IFACE, fd, buildAwgUapi(awg))
+        if (handle < 0) {
+            fail("Не удалось запустить AmneziaWG")
+            return false
+        }
+        awgHandle = handle
+        // UDP-сокет туннеля должен идти мимо самого туннеля.
+        AwgCore.wgGetSocketV4(handle).let { if (it > 0) protect(it) }
+        AwgCore.wgGetSocketV6(handle).let { if (it > 0) protect(it) }
+        try { setUnderlyingNetworks(activeNetwork?.let { arrayOf(it) }) } catch (_: Exception) {}
+        if (!awgHandshake(handle, 8000)) {
+            fail("Сервер не отвечает (нет рукопожатия)")
+            return false
+        }
+        return true
+    }
+
+    /** Ждёт первого рукопожатия awg (last_handshake_time_sec > 0). */
+    private fun awgHandshake(handle: Int, timeoutMs: Int): Boolean {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            try {
-                java.net.Socket().use {
-                    it.connect(java.net.InetSocketAddress("127.0.0.1", port), 500)
-                }
-                return
-            } catch (_: Exception) {
-                Thread.sleep(200)
+            val cfg = AwgCore.wgGetConfig(handle) ?: ""
+            val m = Regex("last_handshake_time_sec=(\\d+)").find(cfg)
+            if (m != null && (m.groupValues[1].toLongOrNull() ?: 0) > 0) return true
+            Thread.sleep(250)
+        }
+        return false
+    }
+
+    /** UAPI-строка set для libwg-go: ключи в hex, awg-параметры, peer с endpoint. */
+    private fun buildAwgUapi(awg: JSONObject): String {
+        val p = awg.optJSONObject("params") ?: JSONObject()
+        val sb = StringBuilder()
+        sb.append("private_key=").append(b64ToHex(awg.getString("privateKey"))).append('\n')
+        // awg-параметры обфускации (device-level, до peer).
+        for (k in listOf("jc", "jmin", "jmax", "s1", "s2", "s3", "s4", "h1", "h2", "h3", "h4", "i1", "i2", "i3", "i4", "i5")) {
+            if (p.has(k)) {
+                val v = p.get(k).toString()
+                if (v.isNotEmpty()) sb.append(k).append('=').append(v).append('\n')
             }
         }
-        Log.w(TAG, "SOCKS $port не открылся за ${timeoutMs}ms")
+        sb.append("public_key=").append(b64ToHex(awg.getString("serverPublicKey"))).append('\n')
+        sb.append("endpoint=").append(awg.getString("endpoint")).append('\n')
+        sb.append("persistent_keepalive_interval=25\n")
+        sb.append("replace_allowed_ips=true\n")
+        sb.append("allowed_ip=0.0.0.0/0\n")
+        sb.append("allowed_ip=::/0\n")
+        return sb.toString()
+    }
+
+    /** base64 (WG-ключ) → hex для UAPI. */
+    private fun b64ToHex(b64: String): String {
+        val bytes = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+        val sb = StringBuilder(bytes.size * 2)
+        for (b in bytes) sb.append(String.format("%02x", b.toInt() and 0xff))
+        return sb.toString()
     }
 
     /**
@@ -164,18 +211,25 @@ class VpnConnectionService : VpnService() {
      */
     private fun reconnect(reason: String) {
         val cfgJson = savedConfig ?: return
-        if (tun == null || reconnecting) return
+        if (reconnecting) return
+        // awg умеет роуминг сам: при смене сети НЕ рестартуем туннель (это давало
+        // ~20с простоя на новое рукопожатие), а лишь заново protect-им UDP-сокет на
+        // новую сеть — WireGuard продолжает работать поверх неё.
+        if (awgHandle != null) {
+            awgRebind(reason)
+            return
+        }
+        if (tun == null) return
         reconnecting = true
         scope.launch {
             try {
                 Log.i(TAG, "Реконнект ($reason)")
-                VpnBus.setStage("connecting")
+                publishStage("connecting")
                 tun2socks?.stop(); tun2socks = null
                 xray?.stop(); xray = null
-                hysteria?.stop(); hysteria = null
                 startCore(JSONObject(cfgJson))
                 if (ProxyProbe.reachable(SOCKS_PORT, 6000)) {
-                    VpnBus.setStage("connected")
+                    publishStage("connected")
                     Log.i(TAG, "Реконнект успешен")
                 } else {
                     // Сети пока нет — остаёмся в "connecting", восстановимся по
@@ -187,6 +241,24 @@ class VpnConnectionService : VpnService() {
             } finally {
                 reconnecting = false
             }
+        }
+    }
+
+    /**
+     * awg-роуминг при смене сети: заново protect-им UDP-сокет туннеля (он был
+     * привязан к старой, уже мёртвой сети) и сообщаем системе подлежащую сеть.
+     * Без рестарта и нового рукопожатия — WG продолжает работать поверх новой сети.
+     */
+    private fun awgRebind(reason: String) {
+        val h = awgHandle ?: return
+        try {
+            AwgCore.wgGetSocketV4(h).let { if (it > 0) protect(it) }
+            AwgCore.wgGetSocketV6(h).let { if (it > 0) protect(it) }
+            setUnderlyingNetworks(activeNetwork?.let { arrayOf(it) })
+            publishStage("connected")
+            Log.i(TAG, "awg rebind на новую сеть ($reason)")
+        } catch (e: Exception) {
+            Log.w(TAG, "awg rebind: ${e.message}")
         }
     }
 
@@ -205,7 +277,7 @@ class VpnConnectionService : VpnService() {
             override fun onLost(network: Network) {
                 if (network == activeNetwork) {
                     activeNetwork = null
-                    if (tun != null) VpnBus.setStage("connecting")
+                    if (tun != null || awgHandle != null) publishStage("connecting")
                 }
             }
         }
@@ -230,6 +302,8 @@ class VpnConnectionService : VpnService() {
         watchdog = scope.launch {
             while (isActive) {
                 delay(20_000)
+                // awg: ядро в Go, рукопожатие держит сам WG — сторож не нужен.
+                if (awgHandle != null) continue
                 if (tun == null) break
                 val core = xray
                 if (core != null && !core.isRunning && !reconnecting) {
@@ -239,11 +313,11 @@ class VpnConnectionService : VpnService() {
         }
     }
 
-    private fun buildTun(cfg: JSONObject, mtu: Int, dns: String): ParcelFileDescriptor? {
+    private fun buildTun(cfg: JSONObject, address: String, mtu: Int, dns: String): ParcelFileDescriptor? {
         val builder = Builder()
             .setSession("Unway")
             .setMtu(mtu)
-            .addAddress("10.10.0.2", 32)
+            .addAddress(address, 32)
             .addDnsServer(dns)
             .addRoute("0.0.0.0", 0)
             .addRoute("::", 0)
@@ -290,24 +364,45 @@ class VpnConnectionService : VpnService() {
         try { b.addDisallowedApplication(pkg) } catch (_: Exception) {}
     }
 
+    /**
+     * Публикует статус в UI-процесс через broadcast: сервис живёт в отдельном
+     * процессе :vpn (чтобы Go-рантаймы xray и awg не сталкивались), поэтому
+     * EventChannel-sink в основном процессе напрямую недоступен.
+     */
+    private fun publishStage(stage: String, message: String? = null) {
+        val i = Intent(ACTION_STATUS).apply {
+            setPackage(packageName)
+            putExtra("stage", stage)
+            if (message != null) putExtra("message", message)
+        }
+        sendBroadcast(i)
+    }
+
     private fun disconnect() {
-        VpnBus.setStage("disconnecting")
+        publishStage("disconnecting")
         watchdog?.cancel(); watchdog = null
         unregisterNetworkCallback()
         savedConfig = null
         tun2socks?.stop(); tun2socks = null
         xray?.stop(); xray = null
-        hysteria?.stop(); hysteria = null
+        awgHandle?.let { try { AwgCore.wgTurnOff(it) } catch (_: Exception) {} }; awgHandle = null
         try { tun?.close() } catch (_: Exception) {}
         tun = null
         stopForeground(STOP_FOREGROUND_REMOVE)
-        VpnBus.setStage("disconnected")
+        publishStage("disconnected")
         stopSelf()
         Log.i(TAG, "VPN отключён")
+        // Убиваем процесс :vpn, чтобы СЛЕДУЮЩИЙ коннект стартовал с чистым Go-рантаймом.
+        // xray (libgojni) и awg (libwg-go) держат каждый свой Go-рантайм — два в одном
+        // процессе несовместимы (SIGSEGV при переключении режимов). Задержка — чтобы
+        // broadcast "disconnected" успел дойти до UI-процесса.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }, 600)
     }
 
     private fun fail(message: String) {
-        VpnBus.setStage("error", message)
+        publishStage("error", message)
         if (killSwitch && tun != null) {
             // Kill switch: оставляем TUN поднятым — трафик блокируется (нет рабочего ядра).
             Log.w(TAG, "Kill switch активен: трафик заблокирован")
@@ -356,8 +451,10 @@ class VpnConnectionService : VpnService() {
     companion object {
         private const val TAG = "VpnConnectionService"
         private const val CHANNEL = "vpncdn_vpn"
+        const val ACTION_STATUS = "com.vpncdn.client.VPN_STATUS"
         private const val NOTIF_ID = 1001
         private const val SOCKS_PORT = 10808
+        private const val AWG_IFACE = "unway-direct"
         // 1280: VLESS+XHTTP+TLS поверх CDN добавляют большую обёртку; 1500 на TUN
         // приводил к фрагментации/потерям → низкая скорость, рывки, скачки пинга.
         private const val MTU = 1280

@@ -7,8 +7,10 @@ import {
 } from 'typeorm';
 
 /**
- * Одноразовый код входа в приложение. Выдаётся ботом, обменивается клиентом на
- * JWT через POST /auth/code. Короткий TTL, единоразовое использование.
+ * Постоянный код входа в приложение (один на пользователя). Выдаётся ботом,
+ * обменивается клиентом на JWT через POST /auth/code. Не одноразовый и без TTL —
+ * привязан к аккаунту; меняется кнопкой «сменить код» в боте (regenerate).
+ * Поля expiresAt/usedAt вестигиальны (nullable, не используются).
  */
 @Entity('login_codes')
 export class LoginCode {
@@ -19,12 +21,12 @@ export class LoginCode {
   @Column({ type: 'varchar', length: 12 })
   code: string;
 
-  @Index()
+  @Index({ unique: true })
   @Column({ type: 'uuid' })
   userId: string;
 
-  @Column({ type: 'timestamptz' })
-  expiresAt: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  expiresAt: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   usedAt: Date | null;

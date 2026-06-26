@@ -11,4 +11,15 @@
       <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
     </application>
   </compatibility>
+  <!-- Права администратора: создание wintun-адаптера (tun2socks) и службы
+       туннеля AmneziaWG (CreateService) иначе падают с Access denied. Уровень
+       задаём ТОЛЬКО здесь; линкерный /MANIFESTUAC убран, иначе mt.exe пытается
+       слить два манифеста с trustInfo и падает (LNK1327). -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
 </assembly>

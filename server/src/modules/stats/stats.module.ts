@@ -4,11 +4,12 @@ import { Node } from '../nodes/entities/node.entity';
 import { Device } from '../devices/entities/device.entity';
 import { NodesModule } from '../nodes/nodes.module';
 import { XrayModule } from '../xray/xray.module';
+import { SosModule } from '../sos/sos.module';
 import { StatsPollerService } from './stats-poller.service';
 import { AlertsService } from './alerts.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Node, Device]), NodesModule, XrayModule],
+  imports: [TypeOrmModule.forFeature([Node, Device]), NodesModule, XrayModule, SosModule],
   providers: [StatsPollerService, AlertsService],
 })
 export class StatsModule {}

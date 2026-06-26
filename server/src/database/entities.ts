@@ -11,6 +11,7 @@ import { AdminUser } from '../modules/admin/entities/admin-user.entity';
 import { AppVersion } from '../modules/app-version/entities/app-version.entity';
 import { LoginCode } from '../modules/auth/entities/login-code.entity';
 import { TrialLedger } from '../modules/subscriptions/entities/trial-ledger.entity';
+import { SosDevice } from '../modules/sos/entities/sos-device.entity';
 
 /** Единый список сущностей для TypeORM (forRoot и CLI data-source). */
 export const entities = [
@@ -27,4 +28,5 @@ export const entities = [
   AppVersion,
   LoginCode,
   TrialLedger,
+  SosDevice,
 ];

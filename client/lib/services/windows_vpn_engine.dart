@@ -121,27 +121,15 @@ class WindowsVpnEngine implements VpnEngine {
             : const <String>[]);
       _logLine('bypass domains resolved: ${_bypassIps.length} IP');
 
-      // 2-3) Ядро: прямой режим Hysteria2 (UDP/QUIC) → hysteria.exe; иначе xray.
-      // Оба отдают SOCKS на _socksPort, дальше tun2socks одинаков.
-      if (config.connection.protocol == 'hysteria2') {
-        final hyFile = File('${_workDir.path}\\hysteria-config.json');
-        await hyFile.writeAsString(_buildHysteriaConfig(config, _serverIps.first));
-        _xray = await Process.start(
-          '$_binDir\\hysteria.exe',
-          ['client', '-c', hyFile.path],
-          workingDirectory: _binDir,
-        );
-        _pipe(_xray!, 'hysteria');
-      } else {
-        // vnext.address = конкретный edge-IP (Host/SNI = домен, NGENIX роутит по Host).
-        await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
-        _xray = await Process.start(
-          '$_binDir\\xray.exe',
-          ['run', '-c', cfgFile.path],
-          workingDirectory: _binDir,
-        );
-        _pipe(_xray!, 'xray');
-      }
+      // 2-3) Ядро Xray: SOCKS на _socksPort, дальше tun2socks.
+      // vnext.address = конкретный edge-IP (Host/SNI = домен, NGENIX роутит по Host).
+      await cfgFile.writeAsString(_buildXrayConfig(config, _serverIps.first));
+      _xray = await Process.start(
+        '$_binDir\\xray.exe',
+        ['run', '-c', cfgFile.path],
+        workingDirectory: _binDir,
+      );
+      _pipe(_xray!, 'xray');
       await _waitSocks();
 
       // 4) tun2socks (создаёт wintun-адаптер).
@@ -357,31 +345,6 @@ class WindowsVpnEngine implements VpnEngine {
     _logLine('bypass routes added: ${_bypassIps.length}');
   }
 
-  /// Конфиг Hysteria2-клиента (прямой режим): SOCKS на _socksPort, UDP/QUIC до
-  /// сервера. server = уже отрезолвленный IP (host-route уводит его мимо туннеля).
-  String _buildHysteriaConfig(TunnelConfig config, String serverAddress) {
-    final c = config.connection;
-    final cfg = {
-      'server': '$serverAddress:${c.port}',
-      'auth': c.auth.isNotEmpty ? c.auth : c.uuid,
-      'tls': {
-        'sni': c.sni,
-        'insecure': c.insecure,
-        if (c.certPin.isNotEmpty) 'pinSHA256': c.certPin,
-      },
-      'socks5': {'listen': '127.0.0.1:$_socksPort'},
-      // Окна QUIC под высокий BDP международного пути.
-      'quic': {
-        'initStreamReceiveWindow': 8388608,
-        'maxStreamReceiveWindow': 8388608,
-        'initConnReceiveWindow': 20971520,
-        'maxConnReceiveWindow': 20971520,
-      },
-      'fastOpen': true,
-    };
-    return const JsonEncoder.withIndent('  ').convert(cfg);
-  }
-
   /// Прямой режим AmneziaWG (Windows): tunnel-сервис amneziawg.exe из .conf.
   /// Сервис сам создаёт адаптер, применяет awg-параметры, маршруты (AllowedIPs),
   /// DNS, MTU и исключает endpoint из туннеля. Keygen — на стороне Dart (WgKeys).
@@ -404,9 +367,66 @@ class WindowsVpnEngine implements VpnEngine {
       throw Exception('amneziawg /installtunnelservice: ${r.stderr}');
     }
 
+    // Маршруты ставим сами (в .conf Table=off): host-route к серверу мимо туннеля
+    // + два /1 через awg-адаптер (перекрывают дефолт, не трогая его) + DNS.
+    await _setupAwgRouting(config.awg!);
+
     if (!await _probe()) throw Exception('Не удалось подключиться к серверу (awg)');
     _setStage(VpnStage.connected);
     _logLine('awg connected');
+  }
+
+  /// Маршрутизация для awg (при Table=off tunnel.dll её не делает).
+  Future<void> _setupAwgRouting(AwgConfig awg) async {
+    // Endpoint host (IP) — увести мимо туннеля, иначе UDP к серверу зациклится.
+    final endpointHost = awg.endpoint.contains(':')
+        ? awg.endpoint.substring(0, awg.endpoint.lastIndexOf(':'))
+        : awg.endpoint;
+    _gateway = await _defaultGateway();
+    _serverIps
+      ..clear()
+      ..addAll(await _resolveIps(endpointHost));
+    _logLine('awg routing: gateway=$_gateway server=$_serverIps');
+    if (_gateway != null) {
+      for (final ip in _serverIps) {
+        await _run('route',
+            ['add', ip, 'mask', '255.255.255.255', _gateway!, 'metric', '1']);
+      }
+    }
+
+    // Ждём появления awg-адаптера и берём его ifIndex/alias.
+    String? alias;
+    for (var i = 0; i < 30; i++) {
+      final res = await _ps(
+        "Get-NetAdapter | Where-Object { \$_.Name -eq '$_awgTunnel' } | Select-Object -First 1 | ForEach-Object { '{0}|{1}' -f \$_.ifIndex, \$_.Name }",
+      );
+      final line = res.trim();
+      if (line.contains('|')) {
+        final parts = line.split('|');
+        _tunIfIndex = int.tryParse(parts[0]);
+        alias = parts.sublist(1).join('|');
+        break;
+      }
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+    if (_tunIfIndex == null) {
+      throw Exception('awg-адаптер не найден');
+    }
+    _logLine('awg adapter ifIndex=$_tunIfIndex alias=$alias');
+
+    // Два /1 через awg-адаптер (on-link, nexthop 0.0.0.0): перекрывают дефолт,
+    // но они специфичнее /0 — выигрывают у Wi-Fi без правки самого default.
+    await _ps(
+      "New-NetRoute -DestinationPrefix '0.0.0.0/1' -InterfaceIndex $_tunIfIndex -NextHop '0.0.0.0' -RouteMetric 1 -PolicyStore ActiveStore -ErrorAction SilentlyContinue",
+    );
+    await _ps(
+      "New-NetRoute -DestinationPrefix '128.0.0.0/1' -InterfaceIndex $_tunIfIndex -NextHop '0.0.0.0' -RouteMetric 1 -PolicyStore ActiveStore -ErrorAction SilentlyContinue",
+    );
+    if (alias != null) {
+      await _run('netsh',
+          ['interface', 'ip', 'set', 'dns', 'name=$alias', 'static', '1.1.1.1']);
+    }
+    _logLine('awg routing done');
   }
 
   /// Снимает tunnel-сервис AmneziaWG (при отключении/очистке).
@@ -424,6 +444,11 @@ class WindowsVpnEngine implements VpnEngine {
       'Address = ${awg.address}/32',
       'DNS = 1.1.1.1',
       'MTU = ${awg.mtu}',
+      // Table = off: tunnel.dll НЕ ставит маршруты и НЕ включает блокирующий
+      // killswitch-файрвол (он глушил приём на машинах с WSL/Hyper-V). Маршруты
+      // (/1 через адаптер + host-route к серверу мимо туннеля) ставим сами в
+      // _setupAwgRouting — как в CDN-режиме.
+      'Table = off',
       'Jc = ${v('jc')}',
       'Jmin = ${v('jmin')}',
       'Jmax = ${v('jmax')}',
@@ -455,7 +480,6 @@ class WindowsVpnEngine implements VpnEngine {
   Future<void> _killOrphans() async {
     await _run('taskkill', ['/F', '/T', '/IM', 'tun2socks.exe']);
     await _run('taskkill', ['/F', '/T', '/IM', 'xray.exe']);
-    await _run('taskkill', ['/F', '/T', '/IM', 'hysteria.exe']);
   }
 
   Future<void> _run(String exe, List<String> args) async {

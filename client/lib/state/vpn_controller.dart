@@ -141,6 +141,37 @@ class VpnController extends ChangeNotifier {
     }
   }
 
+  /// SOS-подключение (с экрана входа, без авторизации): экстренный CDN-туннель
+  /// с лимитом 100 МБ по hardwareId. Без kill switch/обхода/split.
+  Future<void> sosConnect() async {
+    error = null;
+    try {
+      final ident = await DeviceIdentity.resolve();
+      final conn = await _api.sosConnect(ident.hardwareId);
+      final config = TunnelConfig(
+        connection: conn,
+        killSwitch: false,
+        bypassEnabled: false,
+        bypassApps: const [],
+        bypassDomains: const [],
+        splitEnabled: false,
+        splitMode: 'exclude',
+        splitApps: const [],
+      );
+      final ok = await _engine.prepare();
+      if (!ok) {
+        error = 'Не выдано разрешение на VPN';
+        notifyListeners();
+        return;
+      }
+      await _engine.connect(config);
+    } catch (e) {
+      error = e.toString();
+      stage = VpnStage.error;
+      notifyListeners();
+    }
+  }
+
   /// Конфиг туннеля: пробуем получить свежий с сервера (с таймаутом); если сеть
   /// недоступна (глушат связь) — берём последний кэш. Бизнес-ошибки сервера
   /// (нет подписки / лимит устройств) НЕ подменяем кэшем, а показываем.
@@ -170,26 +201,32 @@ class VpnController extends ChangeNotifier {
     final domains = bypass.domains.map((e) => e.value).toList();
 
     // Прямой режим через AmneziaWG (нативный awg-туннель).
-    if (_settings.directMode && connection.directAwg) {
-      final awgCfg = await _buildAwgConfig(deviceId, connection, apps, domains);
-      if (awgCfg != null) return awgCfg;
-      // awg не получился (нет ключей/бинаря) — откат на CDN.
+    // ДИАГНОСТИКА: при directMode бросаем причину отказа в UI вместо тихого CDN.
+    if (_settings.directMode) {
+      if (!connection.directAwg) {
+        throw ApiException(0, 'AWG-DEBUG: directAwg=false (сервер не предложил awg)');
+      }
+      return _buildAwgConfig(deviceId, connection, apps, domains);
     }
     return _composeConfig(connection.select(_settings.directMode), apps, domains);
   }
 
   /// Собирает конфиг прямого режима AmneziaWG: генерит/берёт WG-пару, шлёт pubkey,
   /// получает awg-конфиг. null — если awg недоступен (нет бинаря/ключей).
-  Future<TunnelConfig?> _buildAwgConfig(
+  Future<TunnelConfig> _buildAwgConfig(
     String deviceId,
     DeviceConnection conn,
     List<String> apps,
     List<String> domains,
   ) async {
     final pub = await _ensureWgKeys();
-    if (pub == null) return null;
+    if (pub == null) {
+      throw ApiException(0, 'AWG-DEBUG: ключи WG не сгенерились (cryptography)');
+    }
     final awg = await _api.awgConfig(deviceId, pub);
-    if (awg == null) return null;
+    if (awg == null) {
+      throw ApiException(0, 'AWG-DEBUG: /devices/:id/awg вернул null');
+    }
     return TunnelConfig(
       connection: conn.cdn, // обязательное поле; в awg-режиме не используется
       killSwitch: _settings.killSwitch,

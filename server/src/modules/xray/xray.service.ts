@@ -76,6 +76,15 @@ export class XrayService {
     await this.nodeClient.removeClient(node, device.xrayUuid, this.emailFor(device));
   }
 
+  /** Провижининг клиента по uuid+email напрямую (SOS-режим, без сущности Device). */
+  provisionRaw(node: Node, uuid: string, email: string): Promise<void> {
+    return this.nodeClient.addClient(node, uuid, email);
+  }
+
+  deprovisionRaw(node: Node, uuid: string, email: string): Promise<void> {
+    return this.nodeClient.removeClient(node, uuid, email);
+  }
+
   /** Трафик по пользователям с узла (дельта). */
   fetchStats(node: Node) {
     return this.nodeClient.getStats(node);
@@ -110,12 +119,11 @@ export class XrayService {
     };
   }
 
-  /** CDN-вариант: VLESS + XHTTP + TLS через NGENIX. */
-  private buildCdnVariant(node: Node, device: Device): ConnectionVariant {
-    // Транспорт — XHTTP (как на origin за NGENIX); ws-ссылка не подключится.
-    // xmux в ссылке — чтобы happ/v2rayng (iPhone) тоже использовали несколько
-    // параллельных соединений (меньше всплесков пинга/обрывов). Клиенты без
-    // поддержки extra просто игнорируют параметр.
+  /**
+   * CDN-вариант для произвольного uuid (переиспользуется обычными устройствами и
+   * SOS-режимом). Провижининг клиента на узле — отдельно у вызывающего.
+   */
+  buildCdnConnection(node: Node, xrayUuid: string, label = 'CDN'): ConnectionVariant {
     const xmuxExtra = encodeURIComponent(
       JSON.stringify({
         xmux: {
@@ -127,16 +135,15 @@ export class XrayService {
       }),
     );
     const uri =
-      `vless://${device.xrayUuid}@${node.cdnDomain}:${node.port}` +
+      `vless://${xrayUuid}@${node.cdnDomain}:${node.port}` +
       `?encryption=none&security=tls&sni=${encodeURIComponent(node.sni)}` +
       `&type=xhttp&host=${encodeURIComponent(node.cdnDomain)}` +
       `&path=${encodeURIComponent(node.wsPath)}&mode=auto&extra=${xmuxExtra}` +
-      `#${encodeURIComponent(node.name + ' • CDN')}`;
-
+      `#${encodeURIComponent(node.name + ' • ' + label)}`;
     return {
       mode: 'cdn',
       protocol: 'vless',
-      uuid: device.xrayUuid,
+      uuid: xrayUuid,
       address: node.cdnDomain,
       port: node.port,
       encryption: 'none',
@@ -154,6 +161,11 @@ export class XrayService {
       insecure: false,
       uri,
     };
+  }
+
+  /** CDN-вариант: VLESS + XHTTP + TLS через NGENIX. */
+  private buildCdnVariant(node: Node, device: Device): ConnectionVariant {
+    return this.buildCdnConnection(node, device.xrayUuid, 'CDN');
   }
 
   /**

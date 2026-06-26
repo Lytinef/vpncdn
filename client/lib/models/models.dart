@@ -148,11 +148,11 @@ class Device {
 }
 
 /// Один вариант VLESS-подключения для нативного ядра.
-/// mode='cdn': XHTTP+TLS через NGENIX (обход блокировок).
-/// mode='direct': Vision+Reality мимо CDN (ниже пинг, IP блокируем).
+/// mode='cdn': XHTTP+TLS через NGENIX (обход блокировок). Прямой режим вынесен
+/// в AmneziaWG ([AwgConfig]) и здесь не используется.
 class VlessConnection {
   final String mode;
-  final String protocol; // 'vless' | 'hysteria2'
+  final String protocol; // 'vless'
   final String uuid;
   final String address;
   final int port;

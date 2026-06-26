@@ -1,9 +1,12 @@
 package com.vpncdn.client
 
 import android.app.Activity
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.VpnService
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -23,9 +26,29 @@ class MainActivity : FlutterActivity() {
 
     private var pendingPrepare: MethodChannel.Result? = null
 
+    // Статус из процесса :vpn приходит через broadcast (сервис в отдельном процессе).
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val stage = intent.getStringExtra("stage") ?: return
+            VpnBus.setStage(stage, intent.getStringExtra("message"))
+        }
+    }
+    private var statusReceiverRegistered = false
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
+
+        if (!statusReceiverRegistered) {
+            val filter = IntentFilter(VpnConnectionService.ACTION_STATUS)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(statusReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                registerReceiver(statusReceiver, filter)
+            }
+            statusReceiverRegistered = true
+        }
 
         MethodChannel(messenger, METHOD).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -48,9 +71,11 @@ class MainActivity : FlutterActivity() {
                 }
                 "stage" -> result.success(VpnBus.stage)
                 "pingNow" -> {
-                    // Замер пинга по запросу через SOCKS Xray (в фоне, без блокировки UI).
+                    // Замер пинга по запросу. CDN — через SOCKS Xray; awg — прямой
+                    // замер (SOCKS нет). В фоне, без блокировки UI.
                     Thread {
-                        val ms = com.vpncdn.client.vpn.ProxyProbe.latencyMs(10808, 5000)
+                        var ms = com.vpncdn.client.vpn.ProxyProbe.latencyMs(10808, 5000)
+                        if (ms < 0) ms = com.vpncdn.client.vpn.ProxyProbe.directLatencyMs(5000)
                         runOnUiThread { result.success(ms.toInt()) }
                     }.start()
                 }
@@ -96,5 +121,13 @@ class MainActivity : FlutterActivity() {
             pendingPrepare?.success(resultCode == Activity.RESULT_OK)
             pendingPrepare = null
         }
+    }
+
+    override fun onDestroy() {
+        if (statusReceiverRegistered) {
+            try { unregisterReceiver(statusReceiver) } catch (_: Exception) {}
+            statusReceiverRegistered = false
+        }
+        super.onDestroy()
     }
 }

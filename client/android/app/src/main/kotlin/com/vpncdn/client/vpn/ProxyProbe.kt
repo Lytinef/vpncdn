@@ -42,4 +42,28 @@ object ProxyProbe {
 
     /** Достижим ли внешний мир через туннель. */
     fun reachable(socksPort: Int, timeoutMs: Int): Boolean = latencyMs(socksPort, timeoutMs) >= 0
+
+    /**
+     * Задержка прямого HTTP-запроса (без SOCKS) — для awg-режима, где SOCKS-прокси
+     * Xray нет. Приблизительная оценка (приложение исключено из туннеля), но лучше,
+     * чем «нет пинга».
+     */
+    fun directLatencyMs(timeoutMs: Int): Long {
+        var conn: HttpURLConnection? = null
+        return try {
+            val start = System.nanoTime()
+            conn = (URL(TEST_URL).openConnection() as HttpURLConnection).apply {
+                connectTimeout = timeoutMs
+                readTimeout = timeoutMs
+                useCaches = false
+                requestMethod = "GET"
+            }
+            val code = conn.responseCode
+            if (code in 200..399) (System.nanoTime() - start) / 1_000_000 else -1
+        } catch (_: Exception) {
+            -1
+        } finally {
+            conn?.disconnect()
+        }
+    }
 }

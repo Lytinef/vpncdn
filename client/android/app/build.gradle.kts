@@ -1,7 +1,19 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Релизный keystore: android/key.properties (НЕ в git). Если файла нет —
+// release подписывается debug-ключом (для `flutter run --release` на dev-машине).
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -22,11 +34,24 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Подписываем debug-ключом, чтобы `flutter run --release` работал.
-            // TODO: подключить релизный keystore.
-            signingConfig = signingConfigs.getByName("debug")
+            // Релизный ключ из key.properties; без него — debug (для dev).
+            signingConfig = if (hasReleaseKeystore)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
             // R8 вырезает методы go.Seq (вызываются только из нативного кода libgojni
             // через JNI) → краш "failed to find method Seq.getRef". Отключаем shrink;
             // keep-правила в proguard-rules.pro оставлены на случай включения минификации.
@@ -52,8 +77,8 @@ android {
         getByName("full") { java.srcDir("src/full/kotlin") }
     }
 
-    // Распаковывать нативные .so на диск (nativeLibraryDir), чтобы можно было
-    // запускать бинарь Hysteria2 (libhysteria.so) как подпроцесс в прямом режиме.
+    // Распаковывать нативные .so на диск (nativeLibraryDir) — для загрузки
+    // libwg-go.so (AmneziaWG) и сопутствующих ядер.
     packaging {
         jniLibs {
             useLegacyPackaging = true

@@ -67,6 +67,14 @@ class Api {
   Future<DeviceConnection> connection(String deviceId) async =>
       DeviceConnection.fromJson(await _c.get('/devices/$deviceId/connection'));
 
+  /// SOS-доступ (без авторизации): экстренный CDN-конфиг по hardwareId, лимит
+  /// 100 МБ. Бросает ApiException(403), если лимит исчерпан.
+  Future<VlessConnection> sosConnect(String hardwareId) async {
+    final r = await _c.post('/sos/connect',
+        body: {'hardwareId': hardwareId}, auth: false);
+    return VlessConnection.fromJson(r as Map<String, dynamic>);
+  }
+
   /// Прямой режим AmneziaWG: шлём свой WG-pubkey, получаем awg-конфиг
   /// (address/serverPublicKey/endpoint/mtu/params). null — если awg не настроен.
   Future<AwgConfig?> awgConfig(String deviceId, String publicKey) async {

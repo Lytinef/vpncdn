@@ -1,13 +1,12 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { LoginCode } from './entities/login-code.entity';
 
 // Без неоднозначных символов (0/O, 1/I).
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
-const TTL_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class LoginCodeService {
@@ -18,24 +17,35 @@ export class LoginCodeService {
     private readonly repo: Repository<LoginCode>,
   ) {}
 
-  /** Выдаёт одноразовый код входа (заменяя прошлый неиспользованный код юзера). */
-  async issue(userId: string): Promise<{ code: string; expiresAt: Date }> {
-    await this.repo.delete({ userId, usedAt: IsNull() });
+  /** Возвращает постоянный код пользователя, создавая его при первом обращении. */
+  async getOrCreate(userId: string): Promise<string> {
+    const existing = await this.repo.findOne({ where: { userId } });
+    if (existing) return existing.code;
     const code = await this.uniqueCode();
-    const expiresAt = new Date(Date.now() + TTL_MS);
-    await this.repo.save(this.repo.create({ code, userId, expiresAt }));
-    return { code, expiresAt };
+    await this.repo.save(this.repo.create({ code, userId }));
+    return code;
   }
 
-  /** Проверяет код и возвращает userId; помечает использованным. */
+  /** Генерирует новый постоянный код (старый перестаёт работать). */
+  async regenerate(userId: string): Promise<string> {
+    const code = await this.uniqueCode();
+    const existing = await this.repo.findOne({ where: { userId } });
+    if (existing) {
+      existing.code = code;
+      await this.repo.save(existing);
+    } else {
+      await this.repo.save(this.repo.create({ code, userId }));
+    }
+    return code;
+  }
+
+  /** Постоянный код: проверяет и возвращает userId. НЕ «съедает» (без TTL/usedAt). */
   async redeem(code: string): Promise<string> {
     const normalized = code.trim().toUpperCase();
     const row = await this.repo.findOne({ where: { code: normalized } });
-    if (!row || row.usedAt || row.expiresAt.getTime() < Date.now()) {
-      throw new BadRequestException('Код недействителен или истёк');
+    if (!row) {
+      throw new BadRequestException('Код недействителен');
     }
-    row.usedAt = new Date();
-    await this.repo.save(row);
     return row.userId;
   }
 

@@ -106,6 +106,9 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     );
     bot.callbackQuery('menu:status', (ctx) => this.guard(ctx, () => this.showStatus(ctx)));
     bot.callbackQuery('menu:login', (ctx) => this.guard(ctx, () => this.showLoginCode(ctx)));
+    bot.callbackQuery('menu:login:regen', (ctx) =>
+      this.guard(ctx, () => this.showLoginCode(ctx, true)),
+    );
     bot.callbackQuery('menu:config', (ctx) => this.guard(ctx, () => this.showConfigConfirm(ctx)));
     bot.callbackQuery('config:add', (ctx) => this.guard(ctx, () => this.addConfig(ctx)));
     bot.callbackQuery('menu:bindcard', (ctx) => this.guard(ctx, () => this.showBindCard(ctx)));
@@ -383,16 +386,23 @@ export class BotService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async showLoginCode(ctx: Context): Promise<void> {
+  private async showLoginCode(ctx: Context, regenerate = false): Promise<void> {
     const userId = await this.getUserId(ctx);
-    const { code, expiresAt } = await this.loginCodes.issue(userId);
-    const mins = Math.max(1, Math.round((expiresAt.getTime() - Date.now()) / 60000));
+    const code = regenerate
+      ? await this.loginCodes.regenerate(userId)
+      : await this.loginCodes.getOrCreate(userId);
+    const kb = new InlineKeyboard()
+      .text('🔄 Сменить код', 'menu:login:regen')
+      .row()
+      .text('⬅️ Назад', 'menu:cat:connect');
     await this.render(
       ctx,
       '🔐 <b>Код для входа в приложение</b>\n\n' +
         `<code>${code}</code>\n\n` +
-        `Введите его в приложении Unway. Код одноразовый и действует ${mins} мин.`,
-      ui.backKeyboard('menu:cat:connect'),
+        'Введите его в приложении Unway. Код <b>постоянный</b> и привязан к вашему ' +
+        'аккаунту — сохраните его. Кнопкой ниже можно сменить код (старый перестанет ' +
+        'работать).',
+      kb,
     );
   }
 

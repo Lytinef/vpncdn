@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../state/auth_controller.dart';
+import '../../state/vpn_controller.dart';
+import '../../services/vpn_engine.dart';
 
-/// Вход по одноразовому коду доступа (выдаётся в личном кабинете).
+/// Вход по постоянному коду доступа (выдаётся в личном кабинете боте). Внизу —
+/// SOS VPN: экстренный выход в сеть без входа (CDN, лимит 100 МБ).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -37,6 +40,15 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// SOS VPN: подключение без входа (CDN, лимит 100 МБ по устройству) — чтобы
+  /// без интернета достучаться до бота/оплаты и получить код.
+  Future<void> _sos() async {
+    final vpn = context.read<VpnController>();
+    setState(() => _error = null);
+    await vpn.sosConnect();
+    if (mounted && vpn.error != null) setState(() => _error = vpn.error);
   }
 
   @override
@@ -95,6 +107,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Text('Войти'),
+              ),
+              const SizedBox(height: 12),
+              // SOS VPN — экстренный выход в сеть без входа (CDN, лимит 100 МБ),
+              // чтобы открыть бота/оплату и получить код.
+              Consumer<VpnController>(
+                builder: (_, vpn, __) {
+                  final connecting = vpn.stage == VpnStage.connecting;
+                  final connected = vpn.isConnected;
+                  return OutlinedButton.icon(
+                    onPressed: (_busy || connecting) ? null : _sos,
+                    icon: const Text('🆘'),
+                    label: Text(
+                      connected
+                          ? 'SOS VPN подключён (лимит 100 МБ)'
+                          : connecting
+                              ? 'Подключение SOS…'
+                              : 'SOS VPN — выйти в сеть без входа',
+                    ),
+                  );
+                },
               ),
               const SizedBox(height: 16),
             ],

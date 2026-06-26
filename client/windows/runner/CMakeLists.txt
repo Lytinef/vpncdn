@@ -13,7 +13,6 @@ add_executable(${BINARY_NAME} WIN32
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
   "Runner.rc"
-  "runner.exe.manifest"
 )
 
 # Apply the standard set of build settings. This can be removed for applications
@@ -36,10 +35,10 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter flutter_wrapper_app)
 target_link_libraries(${BINARY_NAME} PRIVATE "dwmapi.lib")
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# Запуск с правами администратора (нужно для wintun + правки маршрутов).
-# Уровень задаём флагом линкера, а не в .manifest, чтобы mt.exe не конфликтовал
-# с UAC-манифестом, который добавляет линкер по умолчанию.
-target_link_options(${BINARY_NAME} PRIVATE "/MANIFESTUAC:\"level='requireAdministrator' uiAccess='false'\"")
+# Манифест встраивается через Runner.rc (RT_MANIFEST, requireAdministrator).
+# Отключаем авто-манифест линкера, иначе mt.exe сливает его с ресурсным и
+# падает (LNK1327). /MANIFEST:NO → manifest только из .rc.
+target_link_options(${BINARY_NAME} PRIVATE "/MANIFEST:NO")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)

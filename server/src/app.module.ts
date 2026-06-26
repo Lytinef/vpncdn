@@ -22,6 +22,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { BotModule } from './modules/bot/bot.module';
 import { AppVersionModule } from './modules/app-version/app-version.module';
+import { SosModule } from './modules/sos/sos.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { AppVersionModule } from './modules/app-version/app-version.module';
     StatsModule,
     BotModule,
     AppVersionModule,
+    SosModule,
   ],
   controllers: [AppController],
 })
